@@ -1,0 +1,15 @@
+package com.vaultx.VaultX.enums;
+
+public enum AuditEventType {
+    LOGIN_SUCCESS,
+    LOGIN_FAILED,
+    USER_REGISTERED,
+    FILE_UPLOADED,
+    FILE_DOWNLOADED,
+    SHARE_CREATED,
+    SHARE_REVOKED,
+    DISTRIBUTION_GENERATED,
+    LEAK_TRACE_PERFORMED,
+    LEAK_TRACE_MATCHED,
+    ACCESS_DENIED
+}

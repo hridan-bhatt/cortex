@@ -1,0 +1,46 @@
+# Build directories
+target/
+**/target/
+dist/
+**/dist/
+build/
+bin/
+*.class
+
+# Node / Frontend
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Database & Log files
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# IDE / Editor files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Python virtualenvs and cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.env
+venv/
+.venv/
