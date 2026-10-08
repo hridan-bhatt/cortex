@@ -4,7 +4,7 @@ export interface BeatDefinition {
   gaugeLabel: string;
   alignment: 'left' | 'right' | 'center';
   title: (ctx: BeatContext) => string;
-  subtitle?: string;
+  subtitle?: string | ((ctx: BeatContext) => string);
   meta: (ctx: BeatContext) => string;
   cue?: string;
   buttonText?: string;
@@ -13,6 +13,7 @@ export interface BeatDefinition {
 
 export interface BeatContext {
   adapter: string;
+  projectName?: string;
   entitiesCount: number;
   relationshipsCount: number;
   controllersCount: number;
@@ -35,7 +36,7 @@ export const VAULTX_BEATS: BeatDefinition[] = [
     gaugeLabel: 'SURFACE',
     alignment: 'left',
     title: () => 'cortex',
-    subtitle: 'codebase intelligence · vaultx',
+    subtitle: (ctx) => `codebase intelligence · ${ctx.projectName || 'vaultx'}`,
     meta: (ctx) => `${ctx.entitiesCount} entities · ${ctx.relationshipsCount} relationships · one codebase`,
     cue: 'scroll to descend',
   },

@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronRight, ChevronDown, Layers } from 'lucide-react';
+import { ChevronRight, ChevronDown, Layers, Check, AlertCircle } from 'lucide-react';
 import { gsap } from 'gsap';
 import { useCortexStore } from '../state/store';
 import { getStratumColor } from '../domain/strata';
+import { fetchCircularDependencies } from '../api/client';
 
 export const Navigator: React.FC = () => {
   const mode = useCortexStore((state) => state.mode);
@@ -18,6 +19,90 @@ export const Navigator: React.FC = () => {
   const triggerFlyTo = useCortexStore((state) => state.triggerFlyTo);
   const setPingNodeId = useCortexStore((state) => state.setPingNodeId);
   const setSelectedNodeId = useCortexStore((state) => state.setSelectedNodeId);
+  const adapter = useCortexStore((state) => state.adapter);
+  const setQueryMode = useCortexStore((state) => state.setQueryMode);
+
+  const [cycleCount, setCycleCount] = useState<number | null>(null);
+
+  // Fetch circular dependencies on load or adapter switch
+  useEffect(() => {
+    let active = true;
+    fetchCircularDependencies()
+      .then((res) => {
+        if (!active) return;
+        const total = res.totalCycles ?? res.circularDependencies?.length ?? 0;
+        setCycleCount(total);
+      })
+      .catch((err) => {
+        if (!active) return;
+        console.warn('[findings] could not check cycles:', err);
+        setCycleCount(0);
+      });
+    return () => {
+      active = false;
+    };
+  }, [adapter, nodes.length]);
+
+  // F1 · Deepest blast radius (max inDegree / dependents)
+  const deepestBlastNode = useMemo(() => {
+    if (nodes.length === 0) return null;
+    let maxNode = nodes[0];
+    let maxIn = -1;
+    for (const n of nodes) {
+      const inDeg = degrees.get(n.id)?.inDegree ?? 0;
+      if (inDeg > maxIn) {
+        maxIn = inDeg;
+        maxNode = n;
+      }
+    }
+    return maxNode && maxIn > 0 ? { node: maxNode, count: maxIn } : null;
+  }, [nodes, degrees]);
+
+  // F2 · Highest coupling (max outDegree / dependencies)
+  const highestCoupledNode = useMemo(() => {
+    if (nodes.length === 0) return null;
+    let maxNode = nodes[0];
+    let maxOut = -1;
+    for (const n of nodes) {
+      const outDeg = degrees.get(n.id)?.outDegree ?? 0;
+      if (outDeg > maxOut) {
+        maxOut = outDeg;
+        maxNode = n;
+      }
+    }
+    return maxNode && maxOut > 0 ? { node: maxNode, count: maxOut } : null;
+  }, [nodes, degrees]);
+
+  // F4 · Orphans (nodes with 0 total connections)
+  const orphanCount = useMemo(() => {
+    return nodes.filter((n) => (degrees.get(n.id)?.total ?? 0) === 0).length;
+  }, [nodes, degrees]);
+
+  // F5 · Mean edge confidence
+  const meanEdgeConfidence = useMemo(() => {
+    if (edges.length === 0) return null;
+    let sum = 0;
+    let validCount = 0;
+    for (const e of edges) {
+      if (typeof e.confidence === 'number' && !isNaN(e.confidence)) {
+        sum += e.confidence;
+        validCount++;
+      }
+    }
+    if (validCount === 0) return null;
+    return (sum / validCount).toFixed(2);
+  }, [edges]);
+
+  // Total findings count
+  const findingsCount = useMemo(() => {
+    let count = 0;
+    if (deepestBlastNode) count++;
+    if (highestCoupledNode) count++;
+    if (cycleCount !== null) count++;
+    if (orphanCount > 0) count++;
+    if (meanEdgeConfidence !== null) count++;
+    return count;
+  }, [deepestBlastNode, highestCoupledNode, cycleCount, orphanCount, meanEdgeConfidence]);
 
   const [expandedStrata, setExpandedStrata] = useState<Set<number>>(new Set());
 
@@ -152,6 +237,159 @@ export const Navigator: React.FC = () => {
 
       {/* Main scrollable body */}
       <div ref={contentRef} className="flex-1 overflow-y-auto overflow-x-hidden py-1 divide-y divide-hairline/40">
+        {/* 1. FINDINGS SECTION (pinned at top of navigator) */}
+        <section className="py-2" data-testid="navigator-findings">
+          <div className="px-3 pb-1.5 flex items-center justify-between">
+            <span className="font-mono text-[10px] text-muted tracking-[0.18em] uppercase font-medium">
+              findings
+            </span>
+            <span className="font-mono text-[10px] text-faint uppercase">
+              {findingsCount}
+            </span>
+          </div>
+
+          <div className="space-y-0.5 px-1.5">
+            {/* F1: Deepest Blast Radius */}
+            {deepestBlastNode && (
+              <button
+                key="finding-blast-radius"
+                type="button"
+                onClick={() => handleEntityClick(deepestBlastNode.node.id)}
+                className="nav-stagger-item w-full px-2 py-1 rounded-[2px] flex items-center justify-between text-left hover:bg-surface2/80 transition-colors cursor-pointer group"
+                title={`blast radius — ${deepestBlastNode.node.entityName} · ${deepestBlastNode.count} dependents`}
+              >
+                <div className="flex items-center gap-2 min-w-0 pr-1">
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{
+                      backgroundColor: getStratumColor(nodeStrata.get(deepestBlastNode.node.id) ?? 6),
+                    }}
+                  />
+                  <span className="font-sans text-[13px] text-ink font-medium truncate max-w-[125px]">
+                    blast radius — {deepestBlastNode.node.entityName}
+                  </span>
+                </div>
+                <span className="font-mono text-[11px] text-muted shrink-0 group-hover:text-ink transition-colors">
+                  {deepestBlastNode.count} dependents
+                </span>
+              </button>
+            )}
+
+            {/* F2: Highest Coupling */}
+            {highestCoupledNode && (
+              <button
+                key="finding-coupling"
+                type="button"
+                onClick={() => handleEntityClick(highestCoupledNode.node.id)}
+                className="nav-stagger-item w-full px-2 py-1 rounded-[2px] flex items-center justify-between text-left hover:bg-surface2/80 transition-colors cursor-pointer group"
+                title={`coupling — ${highestCoupledNode.node.entityName} · ${highestCoupledNode.count} dependencies`}
+              >
+                <div className="flex items-center gap-2 min-w-0 pr-1">
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{
+                      backgroundColor: getStratumColor(nodeStrata.get(highestCoupledNode.node.id) ?? 6),
+                    }}
+                  />
+                  <span className="font-sans text-[13px] text-ink font-medium truncate max-w-[125px]">
+                    coupling — {highestCoupledNode.node.entityName}
+                  </span>
+                </div>
+                <span className="font-mono text-[11px] text-muted shrink-0 group-hover:text-ink transition-colors">
+                  {highestCoupledNode.count} dependencies
+                </span>
+              </button>
+            )}
+
+            {/* F3: Graph Health */}
+            {cycleCount !== null && (
+              <button
+                key="finding-cycles"
+                type="button"
+                onClick={() => {
+                  if (cycleCount > 0) {
+                    setQueryMode('cycles');
+                  }
+                }}
+                className={`nav-stagger-item w-full px-2 py-1 rounded-[2px] flex items-center justify-between text-left transition-colors group ${
+                  cycleCount > 0
+                    ? 'hover:bg-failure/10 cursor-pointer text-failure'
+                    : 'hover:bg-surface2/80 cursor-default text-ink'
+                }`}
+                title={
+                  cycleCount > 0
+                    ? `${cycleCount} cycles detected — click to view cycles lasso`
+                    : 'acyclic — no circular dependencies'
+                }
+              >
+                <div className="flex items-center gap-2 min-w-0 pr-1">
+                  {cycleCount > 0 ? (
+                    <AlertCircle className="w-3.5 h-3.5 text-failure shrink-0" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5 text-stratum3 shrink-0" />
+                  )}
+                  <span
+                    className={`font-sans text-[13px] truncate max-w-[135px] ${
+                      cycleCount > 0 ? 'text-failure font-medium' : 'text-ink'
+                    }`}
+                  >
+                    {cycleCount > 0
+                      ? `${cycleCount} cycles detected`
+                      : 'acyclic — no circular dependencies'}
+                  </span>
+                </div>
+                <span
+                  className={`font-mono text-[11px] shrink-0 ${
+                    cycleCount > 0
+                      ? 'text-failure underline group-hover:no-underline'
+                      : 'text-stratum3'
+                  }`}
+                >
+                  {cycleCount > 0 ? 'view' : 'clean'}
+                </span>
+              </button>
+            )}
+
+            {/* F4: Orphans */}
+            {orphanCount > 0 && (
+              <div
+                key="finding-orphans"
+                className="nav-stagger-item w-full px-2 py-1 rounded-[2px] flex items-center justify-between text-left hover:bg-surface2/80 transition-colors"
+                title={`orphans — ${orphanCount} entities with no connections`}
+              >
+                <div className="flex items-center gap-2 min-w-0 pr-1">
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-muted/40" />
+                  <span className="font-sans text-[13px] text-ink truncate max-w-[125px]">
+                    orphans — {orphanCount} entities
+                  </span>
+                </div>
+                <span className="font-mono text-[11px] text-muted shrink-0">
+                  no connections
+                </span>
+              </div>
+            )}
+
+            {/* F5: Mean Edge Confidence */}
+            {meanEdgeConfidence !== null && (
+              <div
+                key="finding-confidence"
+                className="nav-stagger-item w-full px-2 py-1 rounded-[2px] flex items-center justify-between text-left hover:bg-surface2/80 transition-colors"
+                title={`edge confidence — ${meanEdgeConfidence} mean`}
+              >
+                <div className="flex items-center gap-2 min-w-0 pr-1">
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-stratum1" />
+                  <span className="font-sans text-[13px] text-ink truncate max-w-[125px]">
+                    edge confidence
+                  </span>
+                </div>
+                <span className="font-mono text-[11px] text-muted shrink-0">
+                  {meanEdgeConfidence} mean
+                </span>
+              </div>
+            )}
+          </div>
+        </section>
+
         {/* 2. HUBS SECTION (Top 5 high-degree entities) */}
         <section className="py-2">
           <div className="px-3 pb-1.5 flex items-center justify-between">

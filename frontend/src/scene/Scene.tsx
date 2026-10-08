@@ -196,6 +196,23 @@ const CameraController: React.FC = () => {
       };
     }
   ) => {
+    // Guard: if computed camera position or target contains NaN/Infinity, fall back to node's position + sane offset distance
+    const isInvalid = (v: number) => isNaN(v) || !Number.isFinite(v);
+    if (
+      isInvalid(targetCam.x) || isInvalid(targetCam.y) || isInvalid(targetCam.z) ||
+      isInvalid(targetLook.x) || isInvalid(targetLook.y) || isInvalid(targetLook.z)
+    ) {
+      console.warn('[camera] Guard triggered: NaN/Infinity in camera target pose', {
+        targetCam: { x: targetCam.x, y: targetCam.y, z: targetCam.z },
+        targetLook: { x: targetLook.x, y: targetLook.y, z: targetLook.z },
+      });
+      const safeLookX = isInvalid(targetLook.x) ? 0 : targetLook.x;
+      const safeLookY = isInvalid(targetLook.y) ? 0 : targetLook.y;
+      const safeLookZ = isInvalid(targetLook.z) ? 0 : targetLook.z;
+      targetLook.set(safeLookX, safeLookY, safeLookZ);
+      targetCam.set(safeLookX + 18, safeLookY + 12, safeLookZ + 50);
+    }
+
     soundManager.play('glide');
     startCamPos.current.copy(camera.position);
     targetCamPos.current.copy(targetCam);
@@ -565,8 +582,11 @@ const CameraController: React.FC = () => {
     if (currentDir.lengthSq() < 0.001) {
       currentDir.set(0.18, 0.35, 1.0);
     }
-    currentDir.normalize();
-    const targetCam = targetLook.clone().add(currentDir.multiplyScalar(contextDist));
+    const rawTargetCam = targetLook.clone().add(currentDir.multiplyScalar(contextDist));
+    const isBadNum = (v: number) => isNaN(v) || !Number.isFinite(v);
+    const targetCam = (isBadNum(rawTargetCam.x) || isBadNum(rawTargetCam.y) || isBadNum(rawTargetCam.z))
+      ? new THREE.Vector3(targetPos.x + 18, targetPos.y + 12, targetPos.z + 50)
+      : rawTargetCam;
 
     triggerGlide(targetCam, targetLook, 1100, {
       bracketInfo: {

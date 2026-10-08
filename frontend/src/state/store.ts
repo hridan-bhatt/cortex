@@ -57,6 +57,8 @@ interface CortexState {
   status: AppStatus;
   loadingStage: string;
   adapter: string;
+  customProjectPath: string | null;
+  customProjectName: string | null;
   nodes: NodeDto[];
   edges: EdgeDto[];
   positions: Map<string, NodePosition>;
@@ -120,7 +122,7 @@ interface CortexState {
   clearSoloStrata: () => void;
   dismissError: () => void;
   handoff: () => void;
-  loadGraph: (adapter: string, forceIngest?: boolean) => Promise<void>;
+  loadGraph: (adapter: string, forceIngest?: boolean, customPath?: string) => Promise<void>;
 
   setQueryMode: (mode: QueryMode) => void;
   setImpactData: (data: ImpactResponse | null) => void;
@@ -293,6 +295,8 @@ export const useCortexStore = create<CortexState>((set, get) => ({
   loadingStage: '',
   adapter:
     (typeof window !== 'undefined' ? localStorage.getItem('cortex.adapter') : null) || 'vaultx',
+  customProjectPath: null,
+  customProjectName: null,
   nodes: [],
   edges: [],
   positions: new Map(),
@@ -779,13 +783,17 @@ export const useCortexStore = create<CortexState>((set, get) => ({
     });
   },
 
-  loadGraph: async (requestedAdapter: string, _forceIngest?: boolean) => {
+  loadGraph: async (requestedAdapter: string, _forceIngest?: boolean, customPath?: string) => {
     const previousAdapter = get().adapter;
+    const derivedProjectName = customPath
+      ? customPath.replace(/[/\\]+$/, '').split(/[/\\]/).pop() || 'project'
+      : null;
+
     set({
       status: 'loading',
       isPreloading: true,
       preloaderStages: { ingest: false, graph: false, strata: false, layout: false, fibers: false },
-      loadingStage: `ingesting ${requestedAdapter} …`,
+      loadingStage: customPath ? `analyzing ${derivedProjectName} …` : `ingesting ${requestedAdapter} …`,
       error: null,
     });
 
@@ -793,8 +801,8 @@ export const useCortexStore = create<CortexState>((set, get) => ({
       let activeAdapter = requestedAdapter;
 
       // Explicit ingest of the requested adapter on every load makes boot state deterministic
-      set({ loadingStage: `ingesting ${requestedAdapter} …` });
-      const ingestResp = await ingest(requestedAdapter);
+      set({ loadingStage: customPath ? `analyzing ${derivedProjectName} …` : `ingesting ${requestedAdapter} …` });
+      const ingestResp = await ingest(requestedAdapter, customPath);
       const count = ingestResp.entityCount ?? ingestResp.entitiesIngested ?? 0;
       const returnedAdapter = ingestResp.adapter || requestedAdapter;
       if (ingestResp.adapter && ingestResp.adapter !== requestedAdapter) {
@@ -811,7 +819,12 @@ export const useCortexStore = create<CortexState>((set, get) => ({
       if (typeof window !== 'undefined') {
         localStorage.setItem('cortex.adapter', activeAdapter);
       }
-      set((s) => ({ preloaderStages: { ...s.preloaderStages, ingest: true }, adapter: activeAdapter }));
+      set((s) => ({
+        preloaderStages: { ...s.preloaderStages, ingest: true },
+        adapter: activeAdapter,
+        customProjectPath: customPath || null,
+        customProjectName: derivedProjectName,
+      }));
 
       setActiveAdapter(activeAdapter);
       get().resetAllQueryModes();
@@ -971,6 +984,7 @@ export const useCortexStore = create<CortexState>((set, get) => ({
       const currentSelected = get().selectedNodeId;
       const nodeStillExists = graphData.nodes.some((n) => n.id === currentSelected);
 
+      const isCustom = Boolean(customPath || activeAdapter === 'java');
       set({
         status: 'ready',
         adapter: activeAdapter,
@@ -995,7 +1009,20 @@ export const useCortexStore = create<CortexState>((set, get) => ({
         selectedNodeId: nodeStillExists ? currentSelected : null,
         hoveredNodeId: null,
         error: null,
+        customProjectPath: customPath || (activeAdapter === 'java' ? get().customProjectPath : null),
+        customProjectName: derivedProjectName || (activeAdapter === 'java' ? get().customProjectName : null),
+        ...(isCustom
+          ? {
+              mode: 'descent',
+              descentProgress: 0,
+              dampedDescentProgress: 0,
+              currentBeatIndex: 0,
+            }
+          : {}),
       });
+      if (isCustom && typeof window !== 'undefined') {
+        window.scrollTo(0, 0);
+      }
     } catch (err: unknown) {
       console.error('Failed to load graph:', err);
       const message =
@@ -1003,13 +1030,16 @@ export const useCortexStore = create<CortexState>((set, get) => ({
       setActiveAdapter(previousAdapter);
       set({
         adapter: previousAdapter,
-        status: 'error',
+        status: previousAdapter ? 'ready' : 'error',
         isPreloading: false,
         loadingStage: '',
-        error: message.includes('Failed to fetch') || message.includes('NetworkError')
+        error: customPath
+          ? null
+          : message.includes('Failed to fetch') || message.includes('NetworkError')
           ? 'backend unreachable on :8080 — is Spring Boot running?'
           : message,
       });
+      throw err;
     }
   },
 }));

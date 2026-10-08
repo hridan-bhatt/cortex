@@ -24,12 +24,14 @@ export const DescentOverlay: React.FC = () => {
   const setDescentProgress = useCortexStore((state) => state.setDescentProgress);
   const handoff = useCortexStore((state) => state.handoff);
 
+  const customProjectName = useCortexStore((state) => state.customProjectName);
   const isReady = status === 'ready';
 
   const beats = getBeats(adapter);
 
   const ctx: BeatContext = {
     adapter: adapter || 'vaultx',
+    projectName: customProjectName || undefined,
     entitiesCount: nodes.length,
     relationshipsCount: edges.length,
     controllersCount: strataCounts['controllers'] ?? 0,
@@ -264,7 +266,7 @@ export const DescentOverlay: React.FC = () => {
 
                 {beat.subtitle && (
                   <p className="font-mono text-[11px] text-muted font-normal mt-2 lowercase leading-snug">
-                    {beat.subtitle}
+                    {typeof beat.subtitle === 'function' ? beat.subtitle(ctx) : beat.subtitle}
                   </p>
                 )}
 

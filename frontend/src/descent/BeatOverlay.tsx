@@ -17,6 +17,7 @@ export const BeatOverlay: React.FC<BeatOverlayProps> = ({ onHandoff }) => {
   const godClassName = useCortexStore((state) => state.godClassName);
   const godClassOutDegree = useCortexStore((state) => state.godClassOutDegree);
   const storeHandoff = useCortexStore((state) => state.handoff);
+  const customProjectName = useCortexStore((state) => state.customProjectName);
   const doHandoff = onHandoff || storeHandoff;
 
   const contentRef = useRef<HTMLDivElement>(null);
@@ -25,6 +26,7 @@ export const BeatOverlay: React.FC<BeatOverlayProps> = ({ onHandoff }) => {
 
   const ctx: BeatContext = {
     adapter: adapter || 'vaultx',
+    projectName: customProjectName || undefined,
     entitiesCount: nodes.length,
     relationshipsCount: edges.length,
     controllersCount: strataCounts['controllers'] ?? 0,
@@ -156,7 +158,9 @@ export const BeatOverlay: React.FC<BeatOverlayProps> = ({ onHandoff }) => {
           {/* Subtitle if present */}
           {beatDef.subtitle && (
             <p className="font-mono text-muted text-[11px] tracking-tight leading-relaxed">
-              {beatDef.subtitle}
+              {typeof beatDef.subtitle === 'function'
+                ? beatDef.subtitle(ctx)
+                : beatDef.subtitle}
             </p>
           )}
 

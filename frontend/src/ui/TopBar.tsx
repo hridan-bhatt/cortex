@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Volume2, VolumeX, HelpCircle, Sun, Moon, ScrollText } from 'lucide-react';
+import { Search, Volume2, VolumeX, HelpCircle, Sun, Moon, ScrollText, FolderOpen, X } from 'lucide-react';
 import { useCortexStore } from '../state/store';
 import { MagneticItem } from './useMagnetic';
 import { fetchAdapters } from '../api/client';
@@ -21,6 +21,12 @@ export const TopBar: React.FC = () => {
   const toggleTheme = useCortexStore((state) => state.toggleTheme);
   const isRulesDrawerOpen = useCortexStore((state) => state.isRulesDrawerOpen);
   const toggleRulesDrawer = useCortexStore((state) => state.toggleRulesDrawer);
+  const customProjectName = useCortexStore((state) => state.customProjectName);
+
+  const [isOpenDialogOpen, setIsOpenDialogOpen] = useState(false);
+  const [projectPathInput, setProjectPathInput] = useState('');
+  const [dialogError, setDialogError] = useState<string | null>(null);
+  const [isSubmittingProject, setIsSubmittingProject] = useState(false);
 
   // Global 'R' key listener for rules drawer toggle
   useEffect(() => {
@@ -173,29 +179,47 @@ export const TopBar: React.FC = () => {
           </button>
         </MagneticItem>
 
+        {/* Open Project Folder Dialog trigger (Phase 2B) */}
+        <MagneticItem>
+          <button
+            type="button"
+            onClick={() => {
+              setIsOpenDialogOpen(true);
+              setDialogError(null);
+            }}
+            className="p-1.5 transition-colors cursor-pointer border border-transparent hover:border-hairline rounded-[2px] text-muted hover:text-ink"
+            title="Open project folder"
+            aria-label="Open project folder"
+          >
+            <FolderOpen className="w-4 h-4" />
+          </button>
+        </MagneticItem>
+
         <span className="text-faint text-[10px]">|</span>
 
-        {/* Adapter Switcher */}
+        {/* Adapter Switcher (pinned worlds: vaultx, hospital) */}
         <div className="flex items-center space-x-2.5">
-          {availableAdapters.map((item) => {
-            const isActive = adapter === item.id;
-            return (
-              <MagneticItem key={item.id}>
-                <button
-                  type="button"
-                  onClick={() => handleAdapterChange(item.id)}
-                  className={`font-mono lowercase text-[11px] transition-colors cursor-pointer ${
-                    isActive
-                      ? 'text-ink border-b-2 border-ink pb-[1px]'
-                      : 'text-muted hover:text-ink pb-[3px]'
-                  }`}
-                  title={item.description || item.name}
-                >
-                  {item.id}
-                </button>
-              </MagneticItem>
-            );
-          })}
+          {availableAdapters
+            .filter((item) => item.id === 'vaultx' || item.id === 'hospital')
+            .map((item) => {
+              const isActive = adapter === item.id && !customProjectName;
+              return (
+                <MagneticItem key={item.id}>
+                  <button
+                    type="button"
+                    onClick={() => handleAdapterChange(item.id)}
+                    className={`font-mono lowercase text-[11px] transition-colors cursor-pointer ${
+                      isActive
+                        ? 'text-ink border-b-2 border-ink pb-[1px]'
+                        : 'text-muted hover:text-ink pb-[3px]'
+                    }`}
+                    title={item.description || item.name}
+                  >
+                    {item.id}
+                  </button>
+                </MagneticItem>
+              );
+            })}
 
           <span className="text-faint text-[10px]">·</span>
 
@@ -213,10 +237,104 @@ export const TopBar: React.FC = () => {
 
         <div className="text-faint text-[10px]">|</div>
 
+        {/* Stats Readout with Custom Project Indication */}
         <div className="font-mono text-[11px] text-muted">
+          {customProjectName && (
+            <>
+              <span className="text-ink">custom · {customProjectName}</span>
+              <span className="text-faint mx-1.5">·</span>
+            </>
+          )}
           {nodes.length} entities · {edges.length} edges · {strataCount} strata
         </div>
       </div>
+
+      {/* Open Project Dialog Modal (Phase 2B) */}
+      {isOpenDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 select-auto">
+          <div className="bg-surface border border-hairline rounded-[2px] p-5 w-[420px] max-w-[90vw] shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-hairline pb-2.5">
+              <span className="font-mono text-[10px] tracking-[0.18em] text-ink uppercase font-medium">
+                OPEN PROJECT
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpenDialogOpen(false);
+                  setDialogError(null);
+                }}
+                className="text-muted hover:text-ink cursor-pointer p-0.5"
+                aria-label="Close dialog"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const cleanPath = projectPathInput.trim();
+                if (!cleanPath) {
+                  setDialogError('Please enter a directory path');
+                  return;
+                }
+                setIsSubmittingProject(true);
+                setDialogError(null);
+                try {
+                  await loadGraph('java', true, cleanPath);
+                  setIsOpenDialogOpen(false);
+                  setProjectPathInput('');
+                } catch (err: any) {
+                  setDialogError(err?.message || 'Failed to analyze project');
+                } finally {
+                  setIsSubmittingProject(false);
+                }
+              }}
+              className="space-y-3"
+            >
+              <div>
+                <input
+                  type="text"
+                  value={projectPathInput}
+                  onChange={(e) => {
+                    setProjectPathInput(e.target.value);
+                    if (dialogError) setDialogError(null);
+                  }}
+                  placeholder="C:\path\to\java\project"
+                  className="w-full bg-surface2 border border-hairline rounded-[2px] px-3 py-1.5 font-mono text-[11px] text-ink placeholder:text-faint focus:outline-none focus:border-ink"
+                  autoFocus
+                />
+              </div>
+
+              {dialogError && (
+                <div className="text-[10px] font-mono text-red-400 bg-red-500/10 border border-red-500/20 px-2.5 py-1.5 rounded-[2px] break-words">
+                  {dialogError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end space-x-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOpenDialogOpen(false);
+                    setDialogError(null);
+                  }}
+                  className="px-2.5 py-1 font-mono text-[10px] uppercase text-muted hover:text-ink cursor-pointer"
+                >
+                  cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingProject}
+                  className="px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-ink border border-hairline hover:border-ink transition-colors rounded-[2px] cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingProject ? 'analyzing…' : 'analyze'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

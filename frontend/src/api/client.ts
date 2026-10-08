@@ -31,14 +31,25 @@ export async function fetchAdapters(): Promise<AdapterDescriptor[]> {
   return response.json();
 }
 
-export async function ingest(adapter: string): Promise<IngestResponse> {
-  const response = await fetch(`${BASE_URL}/ingest?adapter=${encodeURIComponent(adapter)}`, {
+export async function ingest(adapter: string, path?: string): Promise<IngestResponse> {
+  const url = path
+    ? `${BASE_URL}/ingest?adapter=${encodeURIComponent(adapter)}&path=${encodeURIComponent(path)}`
+    : `${BASE_URL}/ingest?adapter=${encodeURIComponent(adapter)}`;
+  const response = await fetch(url, {
     method: 'POST',
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Ingestion failed (${response.status}): ${errorText || response.statusText}`);
+    let errorText = await response.text();
+    try {
+      const parsed = JSON.parse(errorText);
+      if (parsed.message) {
+        errorText = parsed.message;
+      }
+    } catch {
+      // not json
+    }
+    throw new Error(errorText || `Ingestion failed (${response.status})`);
   }
 
   return response.json();

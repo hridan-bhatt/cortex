@@ -18,6 +18,7 @@ const TOTAL_DURATION = (PULSE_COUNT - 1) * PULSE_STAGGER + PULSE_DURATION; // ~1
 export const Ping: React.FC<PingProps> = ({ nodeId, onComplete }) => {
   const positions = useCortexStore((state) => state.positions);
   const radii = useCortexStore((state) => state.radii);
+  const theme = useCortexStore((state) => state.theme);
 
   const ring1Ref = useRef<THREE.Mesh>(null);
   const ring2Ref = useRef<THREE.Mesh>(null);
@@ -92,7 +93,6 @@ export const Ping: React.FC<PingProps> = ({ nodeId, onComplete }) => {
   const innerRadius = baseR * 1.4;
   const outerRadius = baseR * 1.5;
 
-  const theme = useCortexStore((state) => state.theme);
   const isPaper = theme === 'paper';
   const ringColor = isPaper ? '#8A6A1F' : COLOR_ACCENT;
   const ringBlending = isPaper ? THREE.NormalBlending : THREE.AdditiveBlending;

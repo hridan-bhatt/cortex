@@ -97,11 +97,17 @@ public class CortexController {
     @PostMapping("/ingest")
     public ResponseEntity<IngestDtos.IngestResponse> ingest(
             @RequestParam(value = "adapter", required = false) String queryAdapter,
+            @RequestParam(value = "path", required = false) String queryPath,
             @RequestBody(required = false) IngestDtos.IngestRequest request) {
         String adapterName = (queryAdapter != null && !queryAdapter.isBlank())
                 ? queryAdapter.trim()
                 : (request != null && request.getAdapter() != null ? request.getAdapter().trim() : "");
-        Map<String, Object> data = request != null ? request.getData() : null;
+        Map<String, Object> data = request != null && request.getData() != null
+                ? new HashMap<>(request.getData())
+                : new HashMap<>();
+        if (queryPath != null && !queryPath.isBlank()) {
+            data.put("path", queryPath.trim());
+        }
         DomainAdapter adapter = adapterRegistry.getAdapter(adapterName, data);
 
         if (adapter == null) {
