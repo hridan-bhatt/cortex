@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { fetchGraph, ingest } from '../api/client';
+import { fetchGraph, ingest, fetchRules } from '../api/client';
 import {
   EdgeDto,
   NodeDto,
@@ -9,6 +9,7 @@ import {
   ChangeImpactResponse,
   ReasoningStreamEvent,
   EvidenceResponse,
+  RuleDto,
 } from '../api/types';
 import { layout, NodeDegrees, NodePosition, StratumMeta } from '../domain/layout';
 
@@ -218,6 +219,17 @@ interface CortexState {
   setSimEvidenceData: (data: EvidenceResponse | null) => void;
   setSimEvidenceLoading: (loading: boolean) => void;
   clearSimulation: () => void;
+
+  // Inference Rules State & Actions
+  rules: RuleDto[];
+  rulesLoading: boolean;
+  rulesError: string | null;
+  isRulesDrawerOpen: boolean;
+  selectedRuleFilter: string | null;
+  loadRules: () => Promise<void>;
+  setRulesDrawerOpen: (open: boolean) => void;
+  toggleRulesDrawer: () => void;
+  setSelectedRuleFilter: (ruleId: string | null) => void;
 
   resetAllQueryModes: () => void;
 
@@ -667,9 +679,43 @@ export const useCortexStore = create<CortexState>((set, get) => ({
       simEvidenceData: null,
       simEvidenceLoading: false,
       hoveredFiber: null,
+      selectedRuleFilter: null,
     }),
 
+  // Inference Rules Implementation
+  rules: [],
+  rulesLoading: false,
+  rulesError: null,
+  isRulesDrawerOpen: false,
+  selectedRuleFilter: null,
+  loadRules: async () => {
+    if (get().rules.length > 0) return;
+    set({ rulesLoading: true, rulesError: null });
+    try {
+      const data = await fetchRules();
+      set({ rules: data || [], rulesLoading: false });
+    } catch (err: any) {
+      console.warn('[rules] Failed to load rules:', err);
+      set({ rulesError: err?.message || 'Failed to fetch rules', rulesLoading: false });
+    }
+  },
+  setRulesDrawerOpen: (isRulesDrawerOpen) => {
+    set({ isRulesDrawerOpen });
+    if (isRulesDrawerOpen) {
+      get().loadRules();
+    }
+  },
+  toggleRulesDrawer: () => {
+    const next = !get().isRulesDrawerOpen;
+    set({ isRulesDrawerOpen: next });
+    if (next) {
+      get().loadRules();
+    }
+  },
+  setSelectedRuleFilter: (selectedRuleFilter) => set({ selectedRuleFilter }),
+
   resetAllQueryModes: () => set({
+    selectedRuleFilter: null,
     queryMode: 'explore',
     impactData: null,
     impactError: null,

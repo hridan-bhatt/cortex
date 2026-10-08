@@ -10,6 +10,8 @@ import {
   Flame,
   Zap,
   Info,
+  ScrollText,
+  Filter,
 } from 'lucide-react';
 import { useCortexStore } from '../state/store';
 import { useSimulateRunner } from './useSimulateRunner';
@@ -40,6 +42,10 @@ export const SimConsole: React.FC = () => {
   const setSimEvidenceData = useCortexStore((state) => state.setSimEvidenceData);
   const setSimEvidenceLoading = useCortexStore((state) => state.setSimEvidenceLoading);
   const clearSimulation = useCortexStore((state) => state.clearSimulation);
+
+  const selectedRuleFilter = useCortexStore((state) => state.selectedRuleFilter);
+  const setSelectedRuleFilter = useCortexStore((state) => state.setSelectedRuleFilter);
+  const toggleRulesDrawer = useCortexStore((state) => state.toggleRulesDrawer);
 
   const { runSimulate, replaySimulation } = useSimulateRunner();
 
@@ -85,6 +91,20 @@ export const SimConsole: React.FC = () => {
     }
     return top;
   }, [nodes, degrees]);
+
+  // Filter events when selectedRuleFilter is active
+  const filteredEvents = useMemo(() => {
+    if (!selectedRuleFilter) return simEvents;
+    return simEvents.filter((ev) => {
+      const data = ev.data || {};
+      const ruleId = ev.ruleId || data.ruleId;
+      return (
+        ruleId === selectedRuleFilter ||
+        ev.eventType === 'TARGET_FAILURE_ASSERTED' ||
+        ev.type === 'TARGET_FAILURE_ASSERTED'
+      );
+    });
+  }, [simEvents, selectedRuleFilter]);
 
   if (mode !== 'instrument' || queryMode !== 'simulate') {
     return null;
@@ -265,13 +285,35 @@ export const SimConsole: React.FC = () => {
                 ref={feedScrollRef}
                 className="flex-1 overflow-y-auto p-2 space-y-1 font-mono text-[11px]"
               >
+                {selectedRuleFilter && (
+                  <div className="px-2.5 py-1.5 bg-stratum1/10 border border-stratum1/30 rounded-[2px] flex items-center justify-between text-[10px] mb-2 shrink-0">
+                    <div className="flex items-center gap-1.5 text-stratum1 truncate">
+                      <Filter className="w-3 h-3 shrink-0" />
+                      <span className="truncate">Filtered by rule: <strong>{selectedRuleFilter}</strong></span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRuleFilter(null)}
+                      className="text-muted hover:text-ink uppercase tracking-wider text-[9px] underline cursor-pointer shrink-0 ml-2"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+
                 {simEvents.length === 0 && (
                   <div className="p-3 text-muted italic text-[11px]">
                     Waiting for reasoning stream events...
                   </div>
                 )}
 
-                {simEvents.map((ev, idx) => {
+                {filteredEvents.length === 0 && simEvents.length > 0 && selectedRuleFilter && (
+                  <div className="p-3 text-muted italic text-[11px]">
+                    No simulation events matched rule "{selectedRuleFilter}".
+                  </div>
+                )}
+
+                {filteredEvents.map((ev, idx) => {
                   const data = ev.data || {};
                   const evType = ev.eventType || ev.type || '';
                   const isFail = evType === 'TARGET_FAILURE_ASSERTED';
@@ -351,13 +393,28 @@ export const SimConsole: React.FC = () => {
                           </span>
                         )}
                         {isRule && (
-                          <span>
+                          <span className="inline-flex items-center gap-2">
                             <span className="text-ink">{ruleName || ruleId}</span>
                             {consumedFactIds?.length > 0 && (
-                              <span className="text-muted text-[10px] ml-1">
+                              <span className="text-muted text-[10px]">
                                 (consumed {consumedFactIds.length})
                               </span>
                             )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedRuleFilter(selectedRuleFilter === ruleId ? null : (ruleId || null));
+                              }}
+                              className={`text-[9px] uppercase tracking-wider px-1 py-0.2 border rounded-[2px] transition-colors cursor-pointer ${
+                                selectedRuleFilter === ruleId
+                                  ? 'border-stratum1 bg-stratum1/20 text-stratum1 font-medium'
+                                  : 'border-hairline text-faint hover:text-muted hover:border-hairline-bright'
+                              }`}
+                              title={selectedRuleFilter === ruleId ? 'Clear filter' : `Filter events by ${ruleId}`}
+                            >
+                              {selectedRuleFilter === ruleId ? 'Filtering' : 'Filter'}
+                            </button>
                           </span>
                         )}
                         {isFixpoint && (
@@ -526,6 +583,19 @@ export const SimConsole: React.FC = () => {
                       {simError}
                     </div>
                   )}
+
+                  {/* View Rules Button */}
+                  <MagneticItem>
+                    <button
+                      type="button"
+                      onClick={() => toggleRulesDrawer()}
+                      className="w-full mt-2 flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-surface border border-hairline hover:border-hairline-bright text-ink font-mono text-[10px] uppercase tracking-wider transition-colors cursor-pointer rounded-[2px]"
+                      title="Open Inference Rules Catalog (R)"
+                    >
+                      <ScrollText className="w-3.5 h-3.5 text-stratum1" />
+                      <span>View Inference Rules (R)</span>
+                    </button>
+                  </MagneticItem>
                 </div>
 
                 <div className="text-[9px] text-faint border-t border-hairline pt-1.5">

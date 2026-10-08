@@ -195,6 +195,10 @@ export interface EvidenceRuleItem {
   conditions?: string;
   relationship?: string;
   evidence_ref?: string;
+  entity_id?: string;
+  source?: string;
+  target?: string;
+  impacted_entity?: string;
   status?: string;
   action?: string;
   priority?: number;
@@ -206,6 +210,7 @@ export interface EvidenceResponse {
     factType: string;
     entityId?: string;
     entityName?: string;
+    ruleId?: string;
     factData?: Record<string, any>;
     sourceData?: any;
     inferred: boolean;
@@ -229,5 +234,14 @@ export interface BatchReasoningResponse {
   facts: any[];
   rulesFired: any[];
   message?: string;
+}
+
+export interface RuleDto {
+  id: string;
+  ruleName: string;
+  conditionVocab: Record<string, any>;
+  actionType: string;
+  firingOrder: number;
+  createdAt?: string;
 }
 

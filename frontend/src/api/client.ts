@@ -10,6 +10,7 @@ import {
   EvidenceResponse,
   AdapterDescriptor,
   BatchReasoningResponse,
+  RuleDto,
 } from './types';
 
 export function apiId(node: { id: string; entityId?: string }): string {
@@ -178,6 +179,17 @@ export async function runReasoningBatch(targetEntityId: string): Promise<BatchRe
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`Failed to run batch reasoning (${response.status}): ${errorText || response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function fetchRules(): Promise<RuleDto[]> {
+  const response = await fetch(`${BASE_URL}/rules`);
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to fetch rules (${response.status}): ${errorText || response.statusText}`);
   }
 
   return response.json();

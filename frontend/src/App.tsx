@@ -12,6 +12,8 @@ import { TraceHud } from './ui/TraceHud';
 import { CyclesHud } from './ui/CyclesHud';
 import { WhatIfHud } from './ui/WhatIfHud';
 import { SimConsole } from './ui/SimConsole';
+import { RulesDrawer } from './ui/RulesDrawer';
+import { ProvenanceStepper } from './ui/ProvenanceStepper';
 
 import { HintStrip } from './ui/HintStrip';
 import { StatusBar } from './ui/StatusBar';
@@ -170,6 +172,8 @@ export const App: React.FC = () => {
           <CyclesHud />
           <WhatIfHud />
           <SimConsole />
+          <RulesDrawer />
+          <ProvenanceStepper />
         </>
       )}
 

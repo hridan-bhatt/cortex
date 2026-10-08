@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Volume2, VolumeX, HelpCircle, Sun, Moon } from 'lucide-react';
+import { Search, Volume2, VolumeX, HelpCircle, Sun, Moon, ScrollText } from 'lucide-react';
 import { useCortexStore } from '../state/store';
 import { MagneticItem } from './useMagnetic';
 import { fetchAdapters } from '../api/client';
@@ -19,6 +19,30 @@ export const TopBar: React.FC = () => {
   const toggleHelp = useCortexStore((state) => state.toggleHelp);
   const theme = useCortexStore((state) => state.theme);
   const toggleTheme = useCortexStore((state) => state.toggleTheme);
+  const isRulesDrawerOpen = useCortexStore((state) => state.isRulesDrawerOpen);
+  const toggleRulesDrawer = useCortexStore((state) => state.toggleRulesDrawer);
+
+  // Global 'R' key listener for rules drawer toggle
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        toggleRulesDrawer();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleRulesDrawer]);
 
   const [availableAdapters, setAvailableAdapters] = useState<AdapterDescriptor[]>([
     { id: 'vaultx', name: 'VaultX Codebase Adapter' },
@@ -114,6 +138,21 @@ export const TopBar: React.FC = () => {
             aria-label="Reference & Shortcuts"
           >
             <HelpCircle className="w-3.5 h-3.5" />
+          </button>
+        </MagneticItem>
+
+        {/* Inference Rules Drawer toggle button (R) */}
+        <MagneticItem>
+          <button
+            type="button"
+            onClick={toggleRulesDrawer}
+            className={`p-1.5 transition-colors cursor-pointer border border-transparent hover:border-hairline rounded-[2px] ${
+              isRulesDrawerOpen ? 'text-ink' : 'text-muted hover:text-ink'
+            }`}
+            title="Inference Rules Catalog (R)"
+            aria-label="Inference Rules Catalog"
+          >
+            <ScrollText className="w-3.5 h-3.5" />
           </button>
         </MagneticItem>
 

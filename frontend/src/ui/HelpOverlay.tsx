@@ -86,12 +86,13 @@ export const HelpOverlay: React.FC = () => {
     {
       icon: Activity,
       name: 'simulate',
-      desc: 'multi-agent reasoning simulation (coming soon)',
+      desc: 'forward-chaining multi-agent reasoning simulation',
     },
   ];
 
   const shortcuts = [
     { key: '⌘K / /', label: 'search palette' },
+    { key: 'R', label: 'rules catalog' },
     { key: 'F', label: 'fit graph in view' },
     { key: 'V', label: 'cycle view mode (min · std · max)' },
     { key: 'Esc', label: 'clear selection / exit mode' },
