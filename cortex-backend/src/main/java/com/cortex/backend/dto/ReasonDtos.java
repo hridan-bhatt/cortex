@@ -13,13 +13,16 @@ public class ReasonDtos {
     public static class ReasonRequest {
         private String query;
         private String targetEntityId;
+        private String targetFailure;
         private String targetStatus = "FAILED";
         private int maxIterations = 10;
 
         public String getQuery() { return query; }
         public void setQuery(String query) { this.query = query; }
-        public String getTargetEntityId() { return targetEntityId; }
+        public String getTargetEntityId() { return targetEntityId != null ? targetEntityId : targetFailure; }
         public void setTargetEntityId(String targetEntityId) { this.targetEntityId = targetEntityId; }
+        public String getTargetFailure() { return targetFailure; }
+        public void setTargetFailure(String targetFailure) { this.targetFailure = targetFailure; }
         public String getTargetStatus() { return targetStatus; }
         public void setTargetStatus(String targetStatus) { this.targetStatus = targetStatus; }
         public int getMaxIterations() { return maxIterations; }

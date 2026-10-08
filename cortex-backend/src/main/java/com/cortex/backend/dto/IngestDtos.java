@@ -21,6 +21,8 @@ public class IngestDtos {
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class IngestResponse {
+        private String adapter;
+        private int entityCount;
         private int entitiesIngested;
         private int relationshipsIngested;
         private int eventsIngested = 0;
@@ -29,12 +31,22 @@ public class IngestDtos {
         public IngestResponse() {}
 
         public IngestResponse(int entitiesIngested, int relationshipsIngested, int eventsIngested, String message) {
+            this(null, entitiesIngested, entitiesIngested, relationshipsIngested, eventsIngested, message);
+        }
+
+        public IngestResponse(String adapter, int entityCount, int entitiesIngested, int relationshipsIngested, int eventsIngested, String message) {
+            this.adapter = adapter;
+            this.entityCount = entityCount;
             this.entitiesIngested = entitiesIngested;
             this.relationshipsIngested = relationshipsIngested;
             this.eventsIngested = eventsIngested;
             this.message = message;
         }
 
+        public String getAdapter() { return adapter; }
+        public void setAdapter(String adapter) { this.adapter = adapter; }
+        public int getEntityCount() { return entityCount > 0 ? entityCount : entitiesIngested; }
+        public void setEntityCount(int entityCount) { this.entityCount = entityCount; }
         public int getEntitiesIngested() { return entitiesIngested; }
         public void setEntitiesIngested(int entitiesIngested) { this.entitiesIngested = entitiesIngested; }
         public int getRelationshipsIngested() { return relationshipsIngested; }

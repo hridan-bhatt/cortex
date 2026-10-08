@@ -19,6 +19,8 @@ import java.util.Map;
 import java.util.Optional;
 
 
+import com.cortex.backend.repository.ProvenanceRepository;
+
 @Service
 public class IngestionService {
 
@@ -27,15 +29,25 @@ public class IngestionService {
     private final NodeRepository nodeRepo;
     private final EdgeRepository edgeRepo;
     private final FactRepository factRepo;
+    private final ProvenanceRepository provRepo;
 
-    public IngestionService(NodeRepository nodeRepo, EdgeRepository edgeRepo, FactRepository factRepo) {
+    public IngestionService(NodeRepository nodeRepo, EdgeRepository edgeRepo, FactRepository factRepo, ProvenanceRepository provRepo) {
         this.nodeRepo = nodeRepo;
         this.edgeRepo = edgeRepo;
         this.factRepo = factRepo;
+        this.provRepo = provRepo;
     }
+
+    private final Object ingestLock = new Object();
 
     @Transactional
     public Map<String, Integer> ingest(DomainAdapter adapter) {
+        synchronized (ingestLock) {
+            provRepo.deleteAll();
+            factRepo.deleteAll();
+            edgeRepo.deleteAll();
+            nodeRepo.deleteAll();
+
         List<Map<String, Object>> entities = adapter.extractEntities();
         List<Map<String, Object>> relationships = adapter.extractRelationships();
         List<Map<String, Object>> events = adapter.extractEvents();
@@ -130,6 +142,7 @@ public class IngestionService {
                 "relationships_ingested", relationshipsCount,
                 "events_ingested", events.size()
         );
+        }
     }
 
     private void recordMemoryEvent(String eventType, Map<String, Object> payload, String sourceRef) {

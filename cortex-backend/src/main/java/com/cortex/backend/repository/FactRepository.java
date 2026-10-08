@@ -17,8 +17,8 @@ public interface FactRepository extends JpaRepository<FactEntity, String> {
     @Query("SELECT f FROM FactEntity f WHERE f.factType LIKE 'MEMORY_EVENT_%' ORDER BY f.createdAt DESC")
     List<FactEntity> findMemoryEvents();
 
-    @Query("SELECT f FROM FactEntity f WHERE f.factType = :factType AND f.sourceData = :sourceData")
-    Optional<FactEntity> findByFactTypeAndSourceData(
+    @Query("SELECT f FROM FactEntity f WHERE f.factType = :factType AND f.sourceData = :sourceData ORDER BY f.createdAt DESC")
+    List<FactEntity> findByFactTypeAndSourceData(
         @Param("factType") String factType,
         @Param("sourceData") String sourceData
     );

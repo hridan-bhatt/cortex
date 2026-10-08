@@ -1,0 +1,244 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root,
+:root[data-theme="night"],
+[data-theme="night"] {
+  color-scheme: dark;
+  --color-bg: #0B0D12;
+  --color-surface: #12151C;
+  --color-surface2: #1A1E28;
+  --color-hairline: #242A37;
+  --color-ink: #EAEDF4;
+  --color-muted: #8F9092;
+  --color-faint: #5C5D60;
+  --color-failure: #FF4553;
+  --color-ember: #FF4553;
+  --color-accent: #FFB454;
+  --color-impact: #FFB454;
+  --color-selected: #F8FAFC;
+  --veil-opacity: 0.35;
+
+  --color-bg-rgb: 11 13 18;
+  --color-surface-rgb: 18 21 28;
+  --color-surface2-rgb: 26 30 40;
+  --color-hairline-rgb: 36 42 55;
+  --color-ink-rgb: 234 237 244;
+  --color-muted-rgb: 143 144 146;
+  --color-faint-rgb: 92 93 96;
+  --color-failure-rgb: 255 69 83;
+  --color-ember-rgb: 255 69 83;
+  --color-accent-rgb: 255 180 84;
+  --color-impact-rgb: 255 180 84;
+  --color-selected-rgb: 248 250 252;
+
+  --color-stratum-0: #E08A3C;
+  --color-stratum-1: #5E9FD4;
+  --color-stratum-2: #A98BD0;
+  --color-stratum-3: #4EAE97;
+  --color-stratum-4: #93B356;
+  --color-stratum-5: #D0687A;
+  --color-stratum-6: #8A8E96;
+  --color-stratum-7: #606672;
+
+  --color-stratum-0-rgb: 224 138 60;
+  --color-stratum-1-rgb: 94 159 212;
+  --color-stratum-2-rgb: 169 139 208;
+  --color-stratum-3-rgb: 78 174 151;
+  --color-stratum-4-rgb: 147 179 86;
+  --color-stratum-5-rgb: 208 104 122;
+  --color-stratum-6-rgb: 138 142 150;
+  --color-stratum-7-rgb: 96 102 114;
+}
+
+:root[data-theme="paper"],
+[data-theme="paper"] {
+  color-scheme: light;
+  --color-bg: #ECE7DE;
+  --color-surface: #F4F0E8;
+  --color-surface2: #FBF8F2;
+  --color-hairline: #D8D2C4;
+  --color-ink: #1A1815;
+  --color-muted: #615B4E;
+  --color-faint: #8B8370;
+  --color-failure: #C81E2E;
+  --color-ember: #C81E2E;
+  --color-accent: #8A6A1F;
+  --color-impact: #B0741A;
+  --color-selected: #1A1815;
+  --veil-opacity: 0.15;
+
+  --color-bg-rgb: 236 231 222;
+  --color-surface-rgb: 244 240 232;
+  --color-surface2-rgb: 251 248 242;
+  --color-hairline-rgb: 216 210 196;
+  --color-ink-rgb: 26 24 21;
+  --color-muted-rgb: 97 91 78;
+  --color-faint-rgb: 139 131 112;
+  --color-failure-rgb: 200 30 46;
+  --color-ember-rgb: 200 30 46;
+  --color-accent-rgb: 138 106 31;
+  --color-impact-rgb: 176 116 26;
+  --color-selected-rgb: 26 24 21;
+
+  --color-stratum-0: #A65A1D;
+  --color-stratum-1: #2E6397;
+  --color-stratum-2: #6E5590;
+  --color-stratum-3: #1F7A64;
+  --color-stratum-4: #5C7A2E;
+  --color-stratum-5: #A03E52;
+  --color-stratum-6: #4A4E56;
+  --color-stratum-7: #3E444E;
+
+  --color-stratum-0-rgb: 166 90 29;
+  --color-stratum-1-rgb: 46 99 151;
+  --color-stratum-2-rgb: 110 85 144;
+  --color-stratum-3-rgb: 31 122 100;
+  --color-stratum-4-rgb: 92 122 46;
+  --color-stratum-5-rgb: 160 62 82;
+  --color-stratum-6-rgb: 74 78 86;
+  --color-stratum-7-rgb: 62 68 78;
+}
+
+html, body {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family: "Instrument Sans Variable", sans-serif;
+  transition: background-color 400ms cubic-bezier(0.16, 1, 0.3, 1),
+              color 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#root {
+  width: 100%;
+}
+
+/* 400ms crossfade on all UI surfaces and panels */
+.bg-surface, .bg-surface2, .bg-bg, header, nav, aside, .hud-shell {
+  transition: background-color 400ms cubic-bezier(0.16, 1, 0.3, 1),
+              color 400ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* In instrument mode, lock the viewport */
+html.mode-instrument,
+body.mode-instrument,
+body.mode-instrument #root {
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* In descent mode, allow natural vertical page scrolling for Lenis */
+html.mode-descent,
+body.mode-descent {
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 100vh;
+}
+
+/* Canonical Lenis smooth-scroll CSS */
+html.lenis, html.lenis.lenis-smooth {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+/* Custom quiet scrollbars for panels */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-hairline);
+  border-radius: 0px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+}
+
+/* Custom cursor rules in instrument mode */
+body.custom-cursor-active,
+body.custom-cursor-active canvas,
+body.custom-cursor-active button,
+body.custom-cursor-active a,
+body.custom-cursor-active [role="button"],
+body.custom-cursor-active .cursor-pointer {
+  cursor: none !important;
+}
+
+body.custom-cursor-active input,
+body.custom-cursor-active textarea,
+body.custom-cursor-active [contenteditable] {
+  cursor: text !important;
+}
+
+/* Live Ticker Marquee Animation */
+@keyframes ticker {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-ticker {
+  animation: ticker 45s linear infinite;
+}
+
+@layer components {
+  .hud-shell {
+    @apply fixed bottom-6 left-1/2 -translate-x-1/2 w-[440px] bg-surface border border-hairline p-3 shadow-2xl z-30 select-none pointer-events-auto rounded-[2px];
+  }
+
+  .hud-header {
+    @apply flex items-center justify-between pb-2 border-b border-hairline;
+  }
+
+  .hud-title {
+    @apply font-mono text-[11px] text-muted tracking-tight truncate max-w-[360px];
+  }
+
+  .hud-row {
+    @apply flex items-center justify-between font-mono text-[11px] py-0.5;
+  }
+
+  .stat-value {
+    @apply font-mono text-[20px] font-medium leading-none;
+  }
+
+  .stat-label {
+    @apply font-mono text-[10px] uppercase tracking-[0.18em] text-muted mt-1;
+  }
+
+  .panel-header {
+    @apply flex items-center justify-between border-b border-hairline pb-2;
+  }
+
+  .panel-title {
+    @apply font-mono text-[10px] text-muted tracking-[0.18em] uppercase font-medium;
+  }
+
+  .badge-chip {
+    @apply font-mono text-[10px] uppercase tracking-[0.18em] px-2 py-0.5 border rounded-[2px];
+  }
+}

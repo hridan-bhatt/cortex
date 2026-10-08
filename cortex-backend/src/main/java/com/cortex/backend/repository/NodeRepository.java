@@ -16,8 +16,14 @@ public interface NodeRepository extends JpaRepository<NodeEntity, String> {
 
     Optional<NodeEntity> findByEntityId(String entityId);
 
-    @Query("SELECT n FROM NodeEntity n WHERE n.id = :idOrEntityId OR n.entityId = :idOrEntityId")
-    Optional<NodeEntity> findByIdOrEntityId(@Param("idOrEntityId") String idOrEntityId);
+    @Query("SELECT n FROM NodeEntity n WHERE n.id = :idOrEntityId OR n.entityId = :idOrEntityId OR LOWER(n.entityName) = LOWER(:idOrEntityId)")
+    List<NodeEntity> findByIdOrEntityIdAll(@Param("idOrEntityId") String idOrEntityId);
+
+    default Optional<NodeEntity> findByIdOrEntityId(String idOrEntityId) {
+        List<NodeEntity> list = findByIdOrEntityIdAll(idOrEntityId);
+        return list == null || list.isEmpty() ? Optional.empty() : Optional.of(list.get(0));
+    }
+
 
     List<NodeEntity> findByEntityType(String entityType);
 

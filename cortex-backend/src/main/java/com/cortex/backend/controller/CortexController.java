@@ -95,18 +95,26 @@ public class CortexController {
 
 //    INGESTION
     @PostMapping("/ingest")
-    public ResponseEntity<IngestDtos.IngestResponse> ingest(@RequestBody IngestDtos.IngestRequest request) {
-        String adapterName = request.getAdapter() == null ? "" : request.getAdapter().trim();
-        DomainAdapter adapter = adapterRegistry.getAdapter(adapterName, request.getData());
+    public ResponseEntity<IngestDtos.IngestResponse> ingest(
+            @RequestParam(value = "adapter", required = false) String queryAdapter,
+            @RequestBody(required = false) IngestDtos.IngestRequest request) {
+        String adapterName = (queryAdapter != null && !queryAdapter.isBlank())
+                ? queryAdapter.trim()
+                : (request != null && request.getAdapter() != null ? request.getAdapter().trim() : "");
+        Map<String, Object> data = request != null ? request.getData() : null;
+        DomainAdapter adapter = adapterRegistry.getAdapter(adapterName, data);
 
         if (adapter == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Unsupported adapter '" + request.getAdapter() + "'. Available: " + adapterRegistry.getAvailableAdapterIds());
+                    "Unsupported adapter '" + adapterName + "'. Available: " + adapterRegistry.getAvailableAdapterIds());
         }
 
         Map<String, Integer> result = ingestionService.ingest(adapter);
+        int entities = result.get("entities_ingested");
         return ResponseEntity.ok(new IngestDtos.IngestResponse(
-                result.get("entities_ingested"),
+                adapterName,
+                entities,
+                entities,
                 result.get("relationships_ingested"),
                 result.get("events_ingested"),
                 "Successfully ingested " + adapterName + " domain data."
@@ -129,6 +137,13 @@ public class CortexController {
             Optional<NodeEntity> nodeOpt = nodeRepo.findByIdOrEntityId(targetId);
             if (nodeOpt.isPresent()) {
                 targetId = nodeOpt.get().getEntityId();
+            } else {
+                for (NodeEntity node : nodeRepo.findAll()) {
+                    if (node.getEntityName() != null && node.getEntityName().equalsIgnoreCase(targetId)) {
+                        targetId = node.getEntityId();
+                        break;
+                    }
+                }
             }
         }
 
@@ -181,6 +196,13 @@ public class CortexController {
             Optional<NodeEntity> nodeOpt = nodeRepo.findByIdOrEntityId(targetId);
             if (nodeOpt.isPresent()) {
                 targetId = nodeOpt.get().getEntityId();
+            } else {
+                for (NodeEntity node : nodeRepo.findAll()) {
+                    if (node.getEntityName() != null && node.getEntityName().equalsIgnoreCase(targetId)) {
+                        targetId = node.getEntityId();
+                        break;
+                    }
+                }
             }
         }
 

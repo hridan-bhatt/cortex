@@ -45,15 +45,23 @@ public class ForwardChainingService {
         return runWithListener(null, maxIterations, targetEntityId, targetStatus, null);
     }
 
+    private final Object executionLock = new Object();
+
     @Transactional
     public Map<String, Object> runWithListener(String simulationId, int maxIterations,
                                               String targetEntityId, String targetStatus,
                                               ReasoningEventListener listener) {
-        long startNs = System.nanoTime();
-        List<Map<String, Object>> rulesFired = new ArrayList<>();
-        int convergedIteration = 0;
+        synchronized (executionLock) {
+            long startNs = System.nanoTime();
+            List<Map<String, Object>> rulesFired = new ArrayList<>();
+            int convergedIteration = 0;
 
-        try {
+            try {
+                provRepo.deleteAll();
+                factRepo.deleteAll(factRepo.findAll().stream()
+                        .filter(f -> Boolean.TRUE.equals(f.getInferred()) || (f.getSourceData() != null && f.getSourceData().startsWith("user_query:")))
+                        .toList());
+
             if (listener != null) {
                 listener.onEvent(new com.cortex.backend.dto.ReasonDtos.ReasoningEventDto.Builder()
                         .simulationId(simulationId)
@@ -71,7 +79,7 @@ public class ForwardChainingService {
             //PUT initial ENTITY_STATUS fact if target is given
             if (targetEntityId != null && !targetEntityId.isBlank()) {
                 String sourceKey = "user_query:" + targetEntityId;
-                Optional<FactEntity> existingInitial = factRepo.findByFactTypeAndSourceData("ENTITY_STATUS", sourceKey);
+                List<FactEntity> existingInitial = factRepo.findByFactTypeAndSourceData("ENTITY_STATUS", sourceKey);
                 FactEntity initialFact;
                 if (existingInitial.isEmpty()) {
                     FactEntity initial = new FactEntity();
@@ -85,7 +93,7 @@ public class ForwardChainingService {
                     initial.setSourceData(sourceKey);
                     initialFact = factRepo.save(initial);
                 } else {
-                    initialFact = existingInitial.get();
+                    initialFact = existingInitial.get(0);
                 }
 
                 if (listener != null) {
@@ -100,6 +108,7 @@ public class ForwardChainingService {
                             .inferred(false)
                             .message("Target failure asserted: " + targetEntityId + " as " + targetStatus)
                             .build());
+                    pause(150);
                 }
             }
 
@@ -131,6 +140,7 @@ public class ForwardChainingService {
                                 .ruleName(rule.getRuleName())
                                 .message("Evaluating rule: " + rule.getRuleName())
                                 .build());
+                        pause(60);
                     }
 
                     List<Map<String, Object>> candidates = evaluateRule(rule);
@@ -167,6 +177,7 @@ public class ForwardChainingService {
                                         .assertedFactId(newFact.getId())
                                         .message("Rule fired: " + rule.getRuleName())
                                         .build());
+                                pause(80);
 
                                 String entId = factData != null ? (String) factData.get("entity_id") : null;
                                 String entName = factData != null ? (String) factData.get("entity_name") : null;
@@ -185,6 +196,7 @@ public class ForwardChainingService {
                                         .ruleId(rule.getId())
                                         .message("Fact asserted: " + (entName != null ? entName : (entId != null ? entId : newFact.getId())) + " = " + stat)
                                         .build());
+                                pause(100);
                             }
 
                             // Creates provenance entry
@@ -207,6 +219,7 @@ public class ForwardChainingService {
                                         .ruleId(rule.getId())
                                         .message("Provenance recorded for fact: " + newFact.getId())
                                         .build());
+                                pause(60);
                             }
 
                             // Updates existing facts so that instant dupes cant get created
@@ -224,6 +237,7 @@ public class ForwardChainingService {
                             .newFacts(newFactsAsserted)
                             .message("Iteration " + convergedIteration + " completed with " + newFactsAsserted + " new fact(s)")
                             .build());
+                    pause(120);
                 }
 
                 if (newFactsAsserted == 0) {
@@ -244,6 +258,7 @@ public class ForwardChainingService {
                         .executionTime(executionTime)
                         .message("Forward chaining converged after " + convergedIteration + " iteration(s)")
                         .build());
+                pause(120);
 
                 listener.onEvent(new com.cortex.backend.dto.ReasonDtos.ReasoningEventDto.Builder()
                         .simulationId(simulationId)
@@ -273,6 +288,7 @@ public class ForwardChainingService {
             throw ex;
         }
     }
+}
 
     // Does the evaluation of rules......for a relationship
 
@@ -584,5 +600,11 @@ public class ForwardChainingService {
 
     private String orEmpty(String s) {
         return s == null ? "" : s;
+    }
+
+    private void pause(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException ignored) {}
     }
 }

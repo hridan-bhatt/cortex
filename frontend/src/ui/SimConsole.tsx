@@ -1,0 +1,541 @@
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  RotateCcw,
+  X,
+  FileText,
+  Flame,
+  Zap,
+  Info,
+} from 'lucide-react';
+import { useCortexStore } from '../state/store';
+import { useSimulateRunner } from './useSimulateRunner';
+import { fetchEvidence } from '../api/client';
+import { MagneticItem } from './useMagnetic';
+
+export const SimConsole: React.FC = () => {
+  const mode = useCortexStore((state) => state.mode);
+  const queryMode = useCortexStore((state) => state.queryMode);
+  const nodes = useCortexStore((state) => state.nodes);
+  const degrees = useCortexStore((state) => state.degrees);
+
+  const simStatus = useCortexStore((state) => state.simStatus);
+  const simTargetId = useCortexStore((state) => state.simTargetId);
+  const simTargetName = useCortexStore((state) => state.simTargetName);
+
+  const simEvents = useCortexStore((state) => state.simEvents);
+  const simFailedNodeIds = useCortexStore((state) => state.simFailedNodeIds);
+  const simFailedEntities = useCortexStore((state) => state.simFailedEntities);
+  const simRulesFired = useCortexStore((state) => state.simRulesFired);
+  const simStats = useCortexStore((state) => state.simStats);
+  const simError = useCortexStore((state) => state.simError);
+  const simSelectedFactId = useCortexStore((state) => state.simSelectedFactId);
+  const simEvidenceData = useCortexStore((state) => state.simEvidenceData);
+  const simEvidenceLoading = useCortexStore((state) => state.simEvidenceLoading);
+
+  const setSimSelectedFactId = useCortexStore((state) => state.setSimSelectedFactId);
+  const setSimEvidenceData = useCortexStore((state) => state.setSimEvidenceData);
+  const setSimEvidenceLoading = useCortexStore((state) => state.setSimEvidenceLoading);
+  const clearSimulation = useCortexStore((state) => state.clearSimulation);
+
+  const { runSimulate, replaySimulation } = useSimulateRunner();
+
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const feedScrollRef = useRef<HTMLDivElement>(null);
+
+  // Esc key exit
+  useEffect(() => {
+    if (queryMode !== 'simulate') return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        clearSimulation();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [queryMode, clearSimulation]);
+
+  // Auto-scroll log feed to bottom as new events arrive
+  useEffect(() => {
+    if (feedScrollRef.current) {
+      feedScrollRef.current.scrollTop = feedScrollRef.current.scrollHeight;
+    }
+  }, [simEvents.length]);
+
+  // Compute blast radius candidates when no simulation is running
+  const candidates = useMemo(() => {
+    if (nodes.length === 0) return [];
+    const sorted = [...nodes]
+      .map((n) => ({
+        node: n,
+        degree: degrees.get(n.id)?.outDegree || 0,
+      }))
+      .sort((a, b) => b.degree - a.degree);
+
+    const fileNode = nodes.find((n) => n.entityName === 'FileEntity');
+    const top = sorted.slice(0, 4);
+    if (fileNode && !top.some((c) => c.node.id === fileNode.id)) {
+      top[top.length - 1] = {
+        node: fileNode,
+        degree: degrees.get(fileNode.id)?.outDegree || 0,
+      };
+    }
+    return top;
+  }, [nodes, degrees]);
+
+  if (mode !== 'instrument' || queryMode !== 'simulate') {
+    return null;
+  }
+
+  const handleFactClick = async (factId: string) => {
+    setSimSelectedFactId(factId);
+    if (factId.startsWith('seed-') || factId === 'fact-target') {
+      setSimEvidenceData({
+        fact: {
+          id: factId,
+          factType: 'ROOT_FAILURE',
+          entityId: simTargetName || simTargetId || 'target',
+          entityName: simTargetName || 'Target Entity',
+          inferred: false,
+        },
+        evidenceChain: [],
+      });
+      return;
+    }
+
+    setSimEvidenceLoading(true);
+    try {
+      const data = await fetchEvidence(factId);
+      setSimEvidenceData(data);
+    } catch (err) {
+      console.warn('[simulate] Evidence fetch failed for fact:', factId, err);
+      setSimEvidenceData({
+        fact: {
+          id: factId,
+          factType: 'CASCADE_INFERENCE',
+          entityId: 'entity',
+          inferred: true,
+        },
+        evidenceChain: [],
+      });
+    } finally {
+      setSimEvidenceLoading(false);
+    }
+  };
+
+  const statusLabel =
+    simStatus === 'streaming'
+      ? 'STREAMING'
+      : simStatus === 'fixpoint'
+      ? 'FIXPOINT REACHED'
+      : simStatus === 'complete'
+      ? 'CONVERGED'
+      : simStatus === 'replaying'
+      ? 'REPLAYING'
+      : simStatus === 'error'
+      ? 'ERROR'
+      : 'STANDBY';
+
+  const statusColor =
+    simStatus === 'streaming' || simStatus === 'replaying'
+      ? 'text-failure bg-failure/10 border-failure/30'
+      : simStatus === 'complete' || simStatus === 'fixpoint'
+      ? 'text-stratum3 bg-stratum3/10 border-stratum3/30'
+      : simStatus === 'error'
+      ? 'text-failure bg-failure/10 border-failure/30'
+      : 'text-muted bg-surface2 border-hairline';
+
+  return (
+    <section
+      data-testid="sim-console"
+      aria-label="Simulation Reasoning Console"
+      className="fixed left-14 right-0 bottom-7 z-40 bg-surface border-t border-hairline shadow-2xl transition-all duration-200 pointer-events-auto select-none rounded-none"
+      style={{
+        boxShadow: '0 -8px 24px -4px rgb(var(--color-bg-rgb) / 0.75)',
+      }}
+    >
+      <div className="h-10 px-3 border-b border-hairline flex items-center justify-between gap-3 bg-surface2/40">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-failure font-mono text-[10px] font-medium tracking-[0.18em] uppercase">
+            <Flame className="w-3.5 h-3.5" />
+            <span>SIMULATE</span>
+          </div>
+
+          <div className="w-[1px] h-3.5 bg-hairline" />
+
+          <div className="flex items-center gap-1.5 font-mono text-[11px]">
+            <span className="text-muted">target:</span>
+            <span className="text-ink font-medium">
+              {simTargetName || (simTargetId ? 'active' : 'none selected')}
+            </span>
+          </div>
+
+          <div className="w-[1px] h-3.5 bg-hairline" />
+
+          <div
+            className={`px-2 py-0.5 border font-mono text-[10px] uppercase tracking-[0.18em] flex items-center gap-1.5 rounded-[2px] ${statusColor}`}
+          >
+            {(simStatus === 'streaming' || simStatus === 'replaying') && (
+              <span className="w-1.5 h-1.5 rounded-full bg-failure animate-ping" />
+            )}
+            <span>{statusLabel}</span>
+          </div>
+
+          {simFailedNodeIds.size > 0 && (
+            <div className="flex items-baseline gap-1.5 font-mono">
+              <span className="text-[13px] font-medium text-failure">
+                {simFailedNodeIds.size}
+              </span>
+              <span className="text-[10px] text-muted uppercase tracking-[0.18em]">failed</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {simEvents.length > 0 && simStatus !== 'streaming' && (
+            <MagneticItem>
+              <button
+                type="button"
+                onClick={replaySimulation}
+                className="flex items-center gap-1.5 px-2 py-1 bg-surface2 border border-hairline hover:border-failure hover:text-failure text-ink font-mono text-[10px] uppercase tracking-[0.18em] transition-colors cursor-pointer rounded-[2px]"
+                title="Replay failure cascade"
+              >
+                <RotateCcw className="w-3 h-3 text-failure" />
+                <span>Replay</span>
+              </button>
+            </MagneticItem>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="p-1 text-muted hover:text-ink transition-colors cursor-pointer rounded-[2px]"
+            aria-label={isCollapsed ? 'Expand reasoning console' : 'Collapse reasoning console'}
+          >
+            {isCollapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+
+          <button
+            type="button"
+            onClick={clearSimulation}
+            className="p-1 text-muted hover:text-ink transition-colors cursor-pointer rounded-[2px]"
+            aria-label="Close simulation"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {!isCollapsed && (
+        <div className="h-44 flex divide-x divide-hairline">
+          <div className="flex-1 flex flex-col min-w-0">
+            {simStatus === 'idle' && !simTargetId ? (
+              /* Quick-Picks View when no node has been targeted */
+              <div className="flex-1 p-4 flex flex-col justify-center items-start space-y-3">
+                <div className="space-y-1">
+                  <div className="font-mono text-[11px] text-ink">
+                    Select a node in the graph to simulate failure, or test a high blast-radius candidate:
+                  </div>
+                  <div className="font-mono text-[10px] text-muted">
+                    Simulates recursive forward-chaining rules over WebSocket streaming.
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap pt-1">
+                  {candidates.map((c) => (
+                    <button
+                      key={c.node.id}
+                      type="button"
+                      onClick={() => runSimulate(c.node.id)}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-surface2/70 border border-hairline hover:border-failure hover:text-failure text-ink font-mono text-[11px] transition-colors cursor-pointer rounded-[2px]"
+                    >
+                      <Zap className="w-3 h-3 text-failure" />
+                      <span className="font-medium">{c.node.entityName}</span>
+                      <span className="text-muted text-[10px]">({c.degree} deps)</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              /* Live Event Feed View */
+              <div
+                ref={feedScrollRef}
+                className="flex-1 overflow-y-auto p-2 space-y-1 font-mono text-[11px]"
+              >
+                {simEvents.length === 0 && (
+                  <div className="p-3 text-muted italic text-[11px]">
+                    Waiting for reasoning stream events...
+                  </div>
+                )}
+
+                {simEvents.map((ev, idx) => {
+                  const data = ev.data || {};
+                  const evType = ev.eventType || ev.type || '';
+                  const isFail = evType === 'TARGET_FAILURE_ASSERTED';
+                  const isFact = evType === 'FACT_ASSERTED';
+                  const isRule = evType === 'RULE_FIRED';
+                  const isFixpoint = evType === 'FIXPOINT_CONVERGED' || evType === 'SIMULATION_COMPLETED';
+
+                  const factId = ev.factId || data.factId || (isFail ? 'fact-target' : null);
+                  const entityName = ev.entityName || data.entityName || ev.entityId || data.entityId;
+                  const ruleId = ev.ruleId || data.ruleId;
+                  const ruleName = ev.ruleName || data.ruleName;
+                  const consumedFactIds = ev.consumedFactIds || data.consumedFactIds || [];
+                  const totalFacts = ev.totalFacts ?? data.totalFacts ?? simFailedEntities.length;
+                  const executionTime = ev.executionTime ?? data.executionTime ?? 0;
+
+                  return (
+                    <div
+                      key={`${ev.sequenceNumber || idx}-${evType}`}
+                      onClick={() => factId && handleFactClick(factId)}
+                      className={`flex items-center gap-2.5 px-2.5 py-1 border transition-colors rounded-[2px] ${
+                        factId ? 'cursor-pointer hover:bg-surface2/80' : ''
+                      } ${
+                        isFail
+                          ? 'border-failure/30 bg-failure/5 text-ink'
+                          : isFact
+                          ? 'border-hairline bg-surface2/40 text-ink'
+                          : isRule
+                          ? 'border-transparent text-muted hover:text-ink'
+                          : isFixpoint
+                          ? 'border-stratum3/30 bg-stratum3/5 text-ink'
+                          : 'border-transparent text-muted'
+                      }`}
+                    >
+                      <span className="text-muted w-6 text-right font-mono text-[10px]">
+                        #{ev.sequenceNumber || idx + 1}
+                      </span>
+
+                      {isFail ? (
+                        <Flame className="w-3.5 h-3.5 text-failure shrink-0" />
+                      ) : isFact ? (
+                        <AlertCircle className="w-3.5 h-3.5 text-accent shrink-0" />
+                      ) : isRule ? (
+                        <Zap className="w-3.5 h-3.5 text-stratum1 shrink-0" />
+                      ) : isFixpoint ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-stratum3 shrink-0" />
+                      ) : (
+                        <Info className="w-3.5 h-3.5 text-muted shrink-0" />
+                      )}
+
+                      <span
+                        className={`text-[10px] font-medium tracking-wide uppercase shrink-0 ${
+                          isFail
+                            ? 'text-failure'
+                            : isFact
+                            ? 'text-accent'
+                            : isRule
+                            ? 'text-stratum1'
+                            : isFixpoint
+                            ? 'text-stratum3'
+                            : 'text-muted'
+                        }`}
+                      >
+                        {evType.replace(/_/g, ' ')}
+                      </span>
+
+                      <span className="truncate flex-1">
+                        {isFail && (
+                          <span className="text-ink font-semibold">
+                            {entityName || simTargetName} FAILED
+                          </span>
+                        )}
+                        {isFact && (
+                          <span>
+                            <span className="text-ink font-medium">{entityName}</span>
+                            <span className="text-muted mx-1">&larr;</span>
+                            <span className="text-faint">{ruleId || 'inferred'}</span>
+                          </span>
+                        )}
+                        {isRule && (
+                          <span>
+                            <span className="text-ink">{ruleName || ruleId}</span>
+                            {consumedFactIds?.length > 0 && (
+                              <span className="text-muted text-[10px] ml-1">
+                                (consumed {consumedFactIds.length})
+                              </span>
+                            )}
+                          </span>
+                        )}
+                        {isFixpoint && (
+                          <span className="text-ink font-medium">
+                            Fixpoint reached with {totalFacts} facts in {executionTime}ms
+                          </span>
+                        )}
+                      </span>
+
+                      {factId && (
+                        <span className="text-[9px] text-stratum1 uppercase tracking-[0.18em] border border-stratum1/30 px-1 py-0.2 shrink-0 rounded-[2px]">
+                          evidence &rarr;
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="w-80 flex flex-col bg-surface2/20 p-3 min-w-0 overflow-y-auto">
+            {simSelectedFactId ? (
+              /* Evidence Detail Popover */
+              <div className="space-y-2">
+                <div className="flex items-center justify-between border-b border-hairline pb-1.5">
+                  <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase text-muted tracking-[0.18em]">
+                    <FileText className="w-3 h-3 text-stratum1" />
+                    <span>Evidence Chain</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSimSelectedFactId(null)}
+                    className="text-muted hover:text-ink transition-colors p-0.5 cursor-pointer rounded-[2px]"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+
+                {simEvidenceLoading ? (
+                  <div className="font-mono text-[11px] text-muted py-2 italic">
+                    Fetching provenance from backend...
+                  </div>
+                ) : (
+                  <div className="space-y-2 text-[11px] font-mono">
+                    <div className="bg-surface border border-hairline p-2 space-y-1 rounded-[2px]">
+                      <div className="text-[10px] text-muted uppercase tracking-[0.18em]">Fact ID</div>
+                      <div className="text-ink font-mono text-[10px] break-all">
+                        {simSelectedFactId}
+                      </div>
+                      <div className="text-[10px] text-muted uppercase tracking-[0.18em] pt-1">Entity</div>
+                      <div className="text-ink font-medium">
+                        {simEvidenceData?.fact?.factData?.entity_name ||
+                          simEvidenceData?.fact?.entityName ||
+                          simEvidenceData?.fact?.entityId ||
+                          'Target Node'}
+                      </div>
+                      {simEvidenceData?.fact?.factData?.reason && (
+                        <div className="text-[10px] text-accent pt-0.5">
+                          {simEvidenceData.fact.factData.reason}
+                        </div>
+                      )}
+                    </div>
+
+                    {simEvidenceData?.ruleFired && (
+                      <div className="bg-surface border border-hairline p-2 space-y-1 text-[10px] rounded-[2px]">
+                        <div className="text-[10px] text-muted uppercase tracking-[0.18em]">Fired Rule</div>
+                        <div className="font-semibold text-stratum1">
+                          {simEvidenceData.ruleFired.rule_name || simEvidenceData.ruleFired.id}
+                        </div>
+                        {simEvidenceData.sourceData?.edge_details?.evidence_ref && (
+                          <div className="text-faint text-[9px] pt-0.5">
+                            source: {simEvidenceData.sourceData.edge_details.evidence_ref}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {simEvidenceData?.evidenceChain && simEvidenceData.evidenceChain.length > 0 ? (
+                      <div className="space-y-1.5">
+                        <div className="text-[10px] text-muted uppercase tracking-[0.18em]">
+                          Provenance Steps ({simEvidenceData.evidenceChain.length})
+                        </div>
+                        {simEvidenceData.evidenceChain.map((stepItem, sIdx) => (
+                          <div
+                            key={stepItem.step || sIdx}
+                            className="bg-surface border border-hairline p-2 space-y-0.5 text-[10px] rounded-[2px]"
+                          >
+                            <div className="font-semibold text-stratum1">
+                              {stepItem.step || stepItem.ruleName || `Step ${sIdx + 1}`}
+                            </div>
+                            {stepItem.rule && (
+                              <div className="text-ink">{stepItem.rule}</div>
+                            )}
+                            {stepItem.relationship && (
+                              <div className="text-muted text-[9px]">
+                                relationship: {stepItem.relationship}
+                                {stepItem.evidence_ref ? ` (${stepItem.evidence_ref})` : ''}
+                              </div>
+                            )}
+                            {stepItem.status && (
+                              <div className="text-muted text-[9px]">
+                                status: <span className="text-failure">{stepItem.status}</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-2 bg-surface border border-hairline text-[10px] text-muted leading-relaxed rounded-[2px]">
+                        {simSelectedFactId.startsWith('seed-') || simSelectedFactId === 'fact-target'
+                          ? 'Root cause assertion: This is the user-asserted initial failure seed. It acts as the root axiom of the forward chaining inference engine.'
+                          : 'Inferred through transitive dependency cascade.'}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Simulation Metrics / Summary */
+              <div className="flex-1 flex flex-col justify-between space-y-3 font-mono text-[11px]">
+                <div className="space-y-2">
+                  <div className="text-[10px] text-muted uppercase tracking-[0.18em] border-b border-hairline pb-1">
+                    Cascade Telemetry
+                  </div>
+
+                  {/* Stat Anatomy: 20px mono value above, 10px muted uppercase label directly below, left-aligned, no boxes/borders */}
+                  <div className="grid grid-cols-2 gap-3 py-1">
+                    <div>
+                      <div className="stat-value text-failure">
+                        {simFailedNodeIds.size}
+                      </div>
+                      <div className="stat-label">
+                        Failed Nodes
+                      </div>
+                    </div>
+                    <div>
+                      <div className="stat-value text-ink">
+                        {simRulesFired.length}
+                      </div>
+                      <div className="stat-label">
+                        Rules Fired
+                      </div>
+                    </div>
+                  </div>
+
+                  {simStats && (
+                    <div className="bg-surface border border-hairline p-2 space-y-1 text-[10px] rounded-[2px]">
+                      <div className="flex justify-between">
+                        <span className="text-muted">Total Facts:</span>
+                        <span className="text-ink font-medium">{simStats.totalFacts}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted">Execution Time:</span>
+                        <span className="text-ink font-medium">{simStats.executionTime}ms</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted">Iterations:</span>
+                        <span className="text-ink font-medium">{simStats.iterations}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {simError && (
+                    <div className="p-2 border border-failure/40 bg-failure/10 text-failure text-[10px] rounded-[2px]">
+                      {simError}
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-[9px] text-faint border-t border-hairline pt-1.5">
+                  Press <kbd className="px-1 py-0.5 bg-surface2 border border-hairline text-muted rounded-[2px]">ESC</kbd> or click empty space to exit simulation.
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+};
