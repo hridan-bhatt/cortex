@@ -50,3 +50,7 @@ cortex-backend/src/main/resources/static/
 
 # Scratch scripts
 scratch/
+
+# Vite cache
+.vite/
+**/.vite/
