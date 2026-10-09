@@ -41,7 +41,11 @@ public class EdgeEntity {
     @PrePersist
     protected void onCreate(){
         if (this.id == null || this.id.isBlank()){
-            this.id = UUID.randomUUID().toString();
+            if (this.sourceId != null && this.targetId != null && this.relationshipType != null) {
+                this.id = UUID.nameUUIDFromBytes((this.sourceId + "->" + this.targetId + ":" + this.relationshipType).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+            } else {
+                this.id = UUID.randomUUID().toString();
+            }
         }
         this.createdAt = LocalDateTime.now();
     }

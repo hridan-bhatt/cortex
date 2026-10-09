@@ -18,7 +18,7 @@ export const DepthGauge: React.FC = () => {
     >
       {/* Active layer label rotated 90 degrees */}
       <div className="w-5 flex justify-center items-center">
-        <span className="font-mono text-[10px] tracking-[0.18em] text-muted whitespace-nowrap uppercase origin-center rotate-90 transition-opacity duration-300">
+        <span className="font-mono text-[10px] tracking-[0.18em] text-muted whitespace-nowrap uppercase origin-center rotate-90 transition-opacity duration-large ease-cortex">
           {activeBeat.gaugeLabel}
         </span>
       </div>
@@ -35,7 +35,7 @@ export const DepthGauge: React.FC = () => {
           return (
             <div
               key={beat.id}
-              className={`absolute left-1/2 -translate-x-1/2 -translate-y-1/2 transition-all duration-200 ${
+              className={`absolute left-1/2 -translate-x-1/2 -translate-y-1/2 transition-all duration-standard ease-cortex ${
                 isCurrent ? 'w-3 h-[1px] bg-ink' : 'w-1.5 h-[1px] bg-hairline'
               }`}
               style={{ top: `${topPercent}%` }}
@@ -45,7 +45,7 @@ export const DepthGauge: React.FC = () => {
 
         {/* Current position marker */}
         <div
-          className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full border border-ink bg-bg transition-transform duration-75"
+          className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full border border-ink bg-bg"
           style={{ top: `${markerTopPercent}%` }}
         />
       </div>

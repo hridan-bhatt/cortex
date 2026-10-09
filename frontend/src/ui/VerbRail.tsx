@@ -9,10 +9,11 @@ import {
   Layers,
   LucideIcon,
 } from 'lucide-react';
-import { gsap } from 'gsap';
+import { gsap, DURATION, CORTEX_EASE } from './motion';
 import { useCortexStore, QueryMode } from '../state/store';
 import { MagneticItem } from './useMagnetic';
 import { useImpactRunner } from './useImpactRunner';
+import { useTraceRunner } from './useTraceRunner';
 import { useCyclesRunner } from './useCyclesRunner';
 import { useWhatIfRunner } from './useWhatIfRunner';
 import { useSimulateRunner } from './useSimulateRunner';
@@ -77,9 +78,23 @@ export const VerbRail: React.FC = () => {
   const setQueryMode = useCortexStore((state) => state.setQueryMode);
   const resetAllQueryModes = useCortexStore((state) => state.resetAllQueryModes);
   const { runImpact } = useImpactRunner();
+  const { runTrace, runReverseDeps } = useTraceRunner();
   const { runCycles } = useCyclesRunner();
   const { runWhatIf } = useWhatIfRunner();
   const { runSimulate } = useSimulateRunner();
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__cortex_runners = {
+        runImpact,
+        runTrace,
+        runReverseDeps,
+        runWhatIf,
+        runCycles,
+        runSimulate,
+      };
+    }
+  }, [runImpact, runTrace, runReverseDeps, runWhatIf, runCycles, runSimulate]);
 
   const isNavigatorOpen = useCortexStore((state) => state.isNavigatorOpen);
   const toggleNavigator = useCortexStore((state) => state.toggleNavigator);
@@ -88,7 +103,7 @@ export const VerbRail: React.FC = () => {
   const indicatorRef = useRef<HTMLDivElement>(null);
   const buttonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
-  // Slide 2px accent bar between buttons (220ms power2.inOut)
+  // Slide 2px accent bar between buttons (240ms cortex ease)
   useEffect(() => {
     if (mode !== 'instrument') return;
 
@@ -97,12 +112,14 @@ export const VerbRail: React.FC = () => {
 
     const railRect = railRef.current.getBoundingClientRect();
     const btnRect = btn.getBoundingClientRect();
-    const targetY = btnRect.top - railRect.top + (btnRect.height - 28) / 2;
+    const container = btn.parentElement;
+    const targetY = container ? container.offsetTop : (btnRect.top - railRect.top);
 
     gsap.to(indicatorRef.current, {
       y: targetY,
-      duration: 0.22,
-      ease: 'power2.inOut',
+      duration: DURATION.STANDARD,
+      ease: CORTEX_EASE,
+      overwrite: 'auto',
     });
   }, [queryMode, mode]);
 
@@ -159,12 +176,12 @@ export const VerbRail: React.FC = () => {
   return (
     <aside
       ref={railRef}
-      className="fixed top-12 left-0 bottom-0 w-14 bg-surface border-r border-hairline z-30 flex flex-col items-center py-3 gap-1 select-none pointer-events-auto rounded-none"
+      className="fixed top-10 left-0 bottom-0 w-14 bg-surface border-r border-hairline z-30 flex flex-col items-center py-3 gap-1 select-none pointer-events-auto rounded-none"
     >
-      {/* Sliding 2px accent indicator bar (FLIP/GSAP 220ms power2.inOut) */}
+      {/* Sliding 2px accent indicator bar (FLIP/GSAP 240ms cortex ease) */}
       <div
         ref={indicatorRef}
-        className="absolute left-0 w-[2px] h-7 bg-ink pointer-events-none"
+        className="absolute left-[6px] top-0 w-[2px] h-11 bg-ink rounded-l-[2px] pointer-events-none"
         style={{ transform: 'translateY(12px)' }}
       />
 
@@ -173,7 +190,7 @@ export const VerbRail: React.FC = () => {
         const isActive = queryMode === v.id;
 
         return (
-          <div key={v.id} className="relative group flex items-center justify-center w-full">
+          <div key={v.id} className="relative group flex items-center justify-center w-[56px] -mr-[1px]">
             <MagneticItem>
               <button
                 ref={(el) => {
@@ -183,7 +200,7 @@ export const VerbRail: React.FC = () => {
                 type="button"
                 disabled={!v.enabled}
                 onClick={() => v.enabled && handleSelectVerb(v.id)}
-                className={`w-11 h-11 flex items-center justify-center transition-colors relative cursor-pointer ${
+                className={`w-11 h-11 flex items-center justify-center transition-colors relative cursor-pointer rounded-[2px] ${
                   !v.enabled
                     ? 'opacity-30 cursor-not-allowed text-muted'
                     : isActive
@@ -197,7 +214,7 @@ export const VerbRail: React.FC = () => {
             </MagneticItem>
 
             {/* Quiet engineering tooltip */}
-            <div className="absolute left-14 ml-2 px-2 py-1 bg-surface2 border border-hairline text-ink font-mono text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-30 shadow-md rounded-[2px]">
+            <div className="absolute left-14 ml-2 px-2 py-1 bg-surface2 border border-hairline text-ink font-mono text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-micro ease-cortex z-30 shadow-md rounded-[2px]">
               <span className="font-sans font-medium text-[11px] text-ink block">{v.label}</span>
               <span className="text-muted block text-[10px]">{v.tooltip}</span>
             </div>
@@ -206,7 +223,7 @@ export const VerbRail: React.FC = () => {
       })}
 
       {/* Bottom: Structure Navigator (Layers) Toggle */}
-      <div className="mt-auto mb-6 relative group flex items-center justify-center w-full">
+      <div className="mt-auto mb-6 relative group flex items-center justify-center w-[56px] -mr-[1px]">
         <MagneticItem>
           <button
             type="button"
@@ -224,7 +241,7 @@ export const VerbRail: React.FC = () => {
         </MagneticItem>
 
         {/* Quiet engineering tooltip */}
-        <div className="absolute left-14 ml-2 px-2 py-1 bg-surface2 border border-hairline text-ink font-mono text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-30 shadow-md rounded-[2px]">
+        <div className="absolute left-14 ml-2 px-2 py-1 bg-surface2 border border-hairline text-ink font-mono text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-micro ease-cortex z-30 shadow-md rounded-[2px]">
           <span className="font-sans font-medium text-[11px] text-ink block">Structure</span>
           <span className="text-muted block text-[10px]">toggle layers & hubs</span>
         </div>

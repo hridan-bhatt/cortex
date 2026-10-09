@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { gsap } from 'gsap';
+import { gsap, DURATION, CORTEX_EASE } from '../ui/motion';
 import { useCortexStore } from '../state/store';
 import { getBeats, BeatContext } from './copy';
 
@@ -78,12 +78,13 @@ export const BeatOverlay: React.FC<BeatOverlayProps> = ({ onHandoff }) => {
       return;
     }
 
-    // Leave transition: 0.3s easeOut
+    // Leave transition: 140ms
     gsap.to(el.children, {
-      y: -25,
+      y: -16,
       opacity: 0,
-      duration: 0.25,
-      ease: 'power2.in',
+      duration: DURATION.MICRO,
+      ease: CORTEX_EASE,
+      overwrite: 'auto',
       onComplete: () => {
         setMountedBeat(currentBeatIndex);
       },
@@ -97,18 +98,19 @@ export const BeatOverlay: React.FC<BeatOverlayProps> = ({ onHandoff }) => {
 
     gsap.fromTo(
       el.children,
-      { opacity: 0 },
-      { opacity: 1, duration: 0.15, ease: 'power2.out' }
+      { opacity: 0, y: 16 },
+      { opacity: 1, y: 0, duration: DURATION.STANDARD, ease: CORTEX_EASE, overwrite: 'auto' }
     );
 
-    // Number count-up 0 -> N over 0.9s power2.out
+    // Number count-up 0 -> N over 380ms
     const targetN = getTargetCount(mountedBeat);
     if (counterRef.current && targetN > 0) {
       const obj = { val: 0 };
       gsap.to(obj, {
         val: targetN,
-        duration: 0.9,
-        ease: 'power2.out',
+        duration: DURATION.LARGE,
+        ease: CORTEX_EASE,
+        overwrite: 'auto',
         onUpdate: () => {
           if (counterRef.current) {
             counterRef.current.innerText = String(Math.round(obj.val));

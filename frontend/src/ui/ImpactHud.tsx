@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
-import { gsap } from 'gsap';
+import { gsap, DURATION, CORTEX_EASE } from './motion';
 import { useCortexStore } from '../state/store';
-import { MagneticItem } from './useMagnetic';
+import { PanelShell, PanelHeader } from './PanelShell';
 
 export { useImpactRunner } from './useImpactRunner';
 
@@ -44,41 +44,58 @@ export const ImpactHud: React.FC = () => {
     }
   }, [impactData, impactWavefrontDepth]);
 
-  // Entrance choreography: header letter-stagger (20ms/char), body slide up 12px
+  // Entrance choreography: HUD mount (240ms at 200ms delay, staggered rows 30ms)
   useEffect(() => {
     if (!impactData || !containerRef.current) return;
 
-    gsap.set(containerRef.current, { opacity: 1, y: 0 });
-
-    if (headerRef.current) {
-      const letters = headerRef.current.querySelectorAll('.header-letter');
-      gsap.fromTo(
-        letters,
-        { opacity: 0 },
-        {
-          opacity: 1,
-          duration: 0.05,
-          stagger: 0.02, // 20ms/char
-          ease: 'none',
-        }
-      );
-    }
+    gsap.fromTo(
+      containerRef.current,
+      { opacity: 0, y: 10 },
+      {
+        opacity: 1,
+        y: 0,
+        duration: DURATION.STANDARD,
+        delay: 0.20,
+        ease: CORTEX_EASE,
+        overwrite: 'auto',
+      }
+    );
 
     if (bodyRef.current) {
-      gsap.fromTo(
-        bodyRef.current,
-        { opacity: 0 },
-        {
-          opacity: 1,
-          duration: 0.15,
-          ease: 'power2.out',
-        }
-      );
+      const rows = bodyRef.current.querySelectorAll('.hud-row');
+      if (rows.length > 0) {
+        gsap.fromTo(
+          rows,
+          { opacity: 0, y: 4 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: DURATION.MICRO,
+            stagger: 0.03, // 30ms stagger
+            delay: 0.24,
+            ease: CORTEX_EASE,
+            overwrite: 'auto',
+          }
+        );
+      }
     }
   }, [impactData?.id]);
 
   const handleClose = () => {
-    clearImpact();
+    if (containerRef.current) {
+      gsap.to(containerRef.current, {
+        opacity: 0,
+        y: 6,
+        duration: DURATION.MICRO, // 140ms exit
+        ease: CORTEX_EASE,
+        overwrite: 'auto',
+        onComplete: () => {
+          clearImpact();
+        },
+      });
+    } else {
+      clearImpact();
+    }
   };
 
   if (queryMode !== 'impact') {
@@ -88,9 +105,13 @@ export const ImpactHud: React.FC = () => {
   // Readable inline error in the HUD shell: "impact query failed — {status}"
   if (impactError) {
     return (
-      <div
+      <PanelShell
         ref={containerRef}
-        className="hud-shell"
+        variant="hud-bottom"
+        isOpen={true}
+        onClose={clearImpact}
+        escPriority={50}
+        className="p-3"
       >
         <div className="flex items-center justify-between">
           <span className="font-mono text-[11px] text-amber-500 tracking-tight truncate">
@@ -105,7 +126,7 @@ export const ImpactHud: React.FC = () => {
             <X className="w-4 h-4" />
           </button>
         </div>
-      </div>
+      </PanelShell>
     );
   }
 
@@ -128,40 +149,36 @@ export const ImpactHud: React.FC = () => {
   const headerText = `impact — ${targetName}`;
 
   return (
-    <div
+    <PanelShell
       ref={containerRef}
-      className="hud-shell"
+      id="impact-hud"
+      testId="impact-hud"
+      ariaLabel="Impact Analysis HUD"
+      variant="hud-bottom"
+      isOpen={true}
+      onClose={handleClose}
+      escPriority={50}
     >
-      {/* Header row: impact — {entityName} + Close X */}
-      <div className="hud-header">
-        <div
-          ref={headerRef}
-          className="hud-title"
-        >
-          {headerText.split('').map((char, i) => (
-            <span
-              key={i}
-              className={`header-letter ${
-                i >= 9 ? 'text-ink font-medium' : 'text-muted'
-              }`}
-            >
-              {char}
-            </span>
-          ))}
-        </div>
-        <MagneticItem>
-          <button
-            type="button"
-            onClick={handleClose}
-            className="text-muted hover:text-ink transition-colors p-1 -mr-1 -mt-1 cursor-pointer rounded-[2px]"
-            aria-label="Close impact HUD"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </MagneticItem>
-      </div>
+      <PanelHeader
+        title={
+          <div ref={headerRef} className="flex items-center min-w-0">
+            {headerText.split('').map((char, i) => (
+              <span
+                key={i}
+                className={`header-letter ${
+                  i >= 9 ? 'text-ink font-medium' : 'text-muted'
+                }`}
+              >
+                {char}
+              </span>
+            ))}
+          </div>
+        }
+        onClose={handleClose}
+        closeTitle="Close impact HUD"
+      />
 
-      <div ref={bodyRef}>
+      <div ref={bodyRef} className="p-3">
         {/* Main Count: impactedCount Stat Anatomy in JetBrains Mono 28px ink */}
         <div className="py-2">
           <div className="font-mono text-[28px] text-ink font-medium leading-none">
@@ -198,6 +215,6 @@ export const ImpactHud: React.FC = () => {
           })}
         </div>
       </div>
-    </div>
+    </PanelShell>
   );
 };

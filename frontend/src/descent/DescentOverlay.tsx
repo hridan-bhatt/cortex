@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import Lenis from 'lenis';
-import { gsap } from 'gsap';
+import { gsap, DURATION, CORTEX_EASE } from '../ui/motion';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useCortexStore } from '../state/store';
 import { getBeats, BeatContext } from './copy';
@@ -56,8 +56,8 @@ export const DescentOverlay: React.FC = () => {
 
     gsap.to(overlayRef.current, {
       opacity: 0,
-      duration: 0.4,
-      ease: 'power2.out',
+      duration: DURATION.LARGE,
+      ease: CORTEX_EASE,
       onComplete: () => {
         lenisRef.current?.destroy();
         ScrollTrigger.getAll().forEach((t) => t.kill());

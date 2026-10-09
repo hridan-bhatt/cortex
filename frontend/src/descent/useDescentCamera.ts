@@ -3,9 +3,13 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useCortexStore } from '../state/store';
 import { getStratumColor } from '../domain/strata';
+import { setBackdropDescentProgress } from '../ui/Backdrop';
 
 const NIGHT_BG = new THREE.Color('#0B0D12');
 const PAPER_BG = new THREE.Color('#ECE7DE');
+const STRATUM_HUES_NIGHT: THREE.Color[] = Array.from({ length: 8 }, (_, i) => new THREE.Color(getStratumColor(i, undefined, 'night')));
+const STRATUM_HUES_PAPER: THREE.Color[] = Array.from({ length: 8 }, (_, i) => new THREE.Color(getStratumColor(i, undefined, 'paper')));
+const _targetFog = new THREE.Color();
 const NARRATIVE_STRATA = [0, 1, 2, 3, 4, 7]; // controllers, services, components, repositories, data, external
 
 // Lightweight layer state for node inner emissive radiance
@@ -299,6 +303,8 @@ export function useDescentCamera() {
 
   const dampedProgressRef = useRef<number>(0);
   const currentBeatRef = useRef<number>(0);
+  const prevReportedPdRef = useRef<number>(-1);
+  const prevReportedBeatRef = useRef<number>(-1);
   const currentFogColor = useRef(new THREE.Color(useCortexStore.getState().theme === 'paper' ? '#ECE7DE' : '#0B0D12'));
 
   // Construct waypoints and piecewise arc-length remap lookup tables
@@ -490,8 +496,15 @@ export function useDescentCamera() {
     }
     currentBeatRef.current = beatIdx;
 
-    // Report unified progress and beat index to store
-    setDampedDescentState(pd, beatIdx);
+    // Report unified progress and beat index to store only on significant delta
+    if (Math.abs(pd - prevReportedPdRef.current) >= 0.002 || beatIdx !== prevReportedBeatRef.current) {
+      prevReportedPdRef.current = pd;
+      prevReportedBeatRef.current = beatIdx;
+      setDampedDescentState(pd, beatIdx);
+    }
+
+    // Scrub backdrop drift scale 1.00 -> 1.04 with scroll progress
+    setBackdropDescentProgress(pd);
 
     // Continuous C1 evaluation along the descent spline
     const camPos = evaluatePos(pd);
@@ -509,18 +522,18 @@ export function useDescentCamera() {
       nearestSIdx = -1;
     } else if (beatIdx >= 1 && beatIdx <= narrativeStrata.length) {
       nearestSIdx = narrativeStrata[beatIdx - 1];
-      stratumHue = new THREE.Color(getStratumColor(nearestSIdx, adapter, theme));
+      stratumHue = (theme === 'paper' ? STRATUM_HUES_PAPER : STRATUM_HUES_NIGHT)[nearestSIdx] || activeBg;
     } else if (beatIdx === numBeats - 1) {
       nearestSIdx = godClassId ? (nodeStrata.get(godClassId) ?? 0) : 0;
-      stratumHue = new THREE.Color(getStratumColor(nearestSIdx, adapter, theme));
+      stratumHue = (theme === 'paper' ? STRATUM_HUES_PAPER : STRATUM_HUES_NIGHT)[nearestSIdx] || activeBg;
     }
 
     descentLayerState.nearestStratumIndex = nearestSIdx;
     descentLayerState.proximity = 1.0;
 
-    const targetFog = activeBg.clone().lerp(stratumHue, 0.12);
+    _targetFog.copy(activeBg).lerp(stratumHue, 0.12);
     const kFog = 1 - Math.exp(-3 * dt);
-    currentFogColor.current.lerp(targetFog, kFog);
+    currentFogColor.current.lerp(_targetFog, kFog);
 
     if (scene.fog && (scene.fog as THREE.Fog).color) {
       (scene.fog as THREE.Fog).color.copy(currentFogColor.current);

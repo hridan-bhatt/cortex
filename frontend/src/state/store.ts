@@ -13,9 +13,25 @@ import {
 } from '../api/types';
 import { layout, NodeDegrees, NodePosition, StratumMeta } from '../domain/layout';
 
-import { AppTheme, classifyNode, logStrataDistribution, performReconLog, setActiveAdapter, setActiveTheme } from '../domain/strata';
+import { AppTheme, classifyNode, compute3DThemeValues, logStrataDistribution, performReconLog, setActiveAdapter, setActiveTheme } from '../domain/strata';
 import { buildSearchIndex, SearchIndexEntry } from '../domain/search';
 import { soundManager } from '../audio/synth';
+
+export type ThemeToggleDelegate = (
+  current: AppTheme,
+  next: AppTheme,
+  onApplyDomTokens: () => void,
+  onSwapBackdrop: () => void,
+  onApplyReactTheme: () => void,
+  onMidpoint3D: () => void,
+  onComplete: () => void
+) => void;
+
+let themeToggleDelegate: ThemeToggleDelegate | null = null;
+
+export function registerThemeToggleDelegate(delegate: ThemeToggleDelegate | null) {
+  themeToggleDelegate = delegate;
+}
 
 export type AppStatus = 'idle' | 'loading' | 'ready' | 'error';
 export type AppMode = 'descent' | 'instrument';
@@ -49,6 +65,10 @@ export interface BracketTarget {
 interface CortexState {
   mode: AppMode;
   theme: AppTheme;
+  isFrameloopSuspended: boolean;
+  isThemeTransitioning: boolean;
+  deferredThemeToggle: boolean;
+  setFrameloopSuspended: (isFrameloopSuspended: boolean) => void;
   setTheme: (theme: AppTheme) => void;
   toggleTheme: () => void;
   descentProgress: number; // 0..1, driven by ScrollTrigger
@@ -123,6 +143,7 @@ interface CortexState {
   dismissError: () => void;
   handoff: () => void;
   loadGraph: (adapter: string, forceIngest?: boolean, customPath?: string) => Promise<void>;
+  recoverStaleSession: () => Promise<void>;
 
   setQueryMode: (mode: QueryMode) => void;
   setImpactData: (data: ImpactResponse | null) => void;
@@ -272,6 +293,23 @@ interface CortexState {
   toggleHelp: () => void;
   hoveredStratumIndex: number | null;
   setHoveredStratumIndex: (index: number | null) => void;
+
+  // Phase 2 Scrubber & Simulation
+  simScrubIndex: number | null;
+  scrubSimulationTo: (eventIndex: number | null) => void;
+
+  // The Tour State
+  isTourActive: boolean;
+  tourBeat: number;
+  tourKicker: string | null;
+  tourCaption: string | null;
+  setTourActive: (active: boolean) => void;
+  setTourStep: (beat: number, kicker: string | null, caption: string | null) => void;
+
+  // World Framing
+  worldFramingTrigger: { stamp?: string; timestamp: number } | null;
+  triggerWorldFraming: (stamp?: string) => void;
+  clearWorldFraming: () => void;
 }
 
 const initialTheme: AppTheme =
@@ -283,6 +321,88 @@ if (typeof document !== 'undefined') {
   document.documentElement.setAttribute('data-theme', initialTheme);
   document.body?.setAttribute('data-theme', initialTheme);
   setActiveTheme(initialTheme);
+}
+
+export function computeSimStateAtEventIndex(
+  events: ReasoningStreamEvent[],
+  targetIndex: number,
+  nodes: NodeDto[]
+) {
+  const eventsToApply = events.slice(0, targetIndex);
+  const failedNodeIds = new Set<string>();
+  const failedEntities: Array<{
+    factId: string;
+    entityId: string;
+    entityName: string;
+    status: string;
+    ruleId?: string;
+    ruleName?: string;
+    sequenceNumber: number;
+  }> = [];
+  const rulesFired: Array<{
+    ruleId: string;
+    ruleName: string;
+    consumedFactIds: string[];
+    assertedFactId: string;
+    sequenceNumber: number;
+  }> = [];
+
+  for (const event of eventsToApply) {
+    const evType = event.eventType || event.type || '';
+    const eid = event.entityId || event.data?.entityId;
+    const ename = event.entityName || event.data?.entityName;
+    const fid = event.factId || event.data?.factId;
+    const status = event.status || event.data?.status || 'FAILED';
+    const ruleId = event.ruleId || event.data?.ruleId;
+    const ruleName = event.ruleName || event.data?.ruleName;
+    const consumedFactIds = event.consumedFactIds || event.data?.consumedFactIds || [];
+    const assertedFactId = event.assertedFactId || event.data?.assertedFactId;
+
+    if (evType === 'TARGET_FAILURE_ASSERTED') {
+      const matched = nodes.find(
+        (n) => n.id === eid || n.entityId === eid || n.entityName === eid || (ename && n.entityName === ename)
+      );
+      if (matched) {
+        failedNodeIds.add(matched.id);
+      }
+      failedEntities.push({
+        factId: fid || 'fact-target',
+        entityId: eid || '',
+        entityName: ename || matched?.entityName || eid || '',
+        status: status,
+        sequenceNumber: event.sequenceNumber,
+      });
+    } else if (evType === 'FACT_ASSERTED') {
+      const isImpactFact = status === 'FAILED' || status === 'IMPACTED' || status === 'REMOVED';
+      const matched = nodes.find(
+        (n) => n.id === eid || n.entityId === eid || n.entityName === eid || (ename && n.entityName === ename)
+      );
+      if (matched && isImpactFact) {
+        failedNodeIds.add(matched.id);
+      }
+      if (isImpactFact && (eid || matched)) {
+        failedEntities.push({
+          factId: fid || `fact-${event.sequenceNumber}`,
+          entityId: eid || matched?.id || '',
+          entityName: ename || matched?.entityName || eid || '',
+          status: status,
+          ruleId: ruleId,
+          ruleName: ruleName,
+          sequenceNumber: event.sequenceNumber,
+        });
+      }
+    } else if (evType === 'RULE_FIRED') {
+      rulesFired.push({
+        ruleId: ruleId || 'rule',
+        ruleName: ruleName || ruleId || 'Rule Fired',
+        consumedFactIds: consumedFactIds,
+        assertedFactId: assertedFactId || '',
+        sequenceNumber: event.sequenceNumber,
+      });
+    }
+  }
+
+  return { failedNodeIds, failedEntities, rulesFired };
 }
 
 export const useCortexStore = create<CortexState>((set, get) => ({
@@ -409,8 +529,22 @@ export const useCortexStore = create<CortexState>((set, get) => ({
   hoveredStratumIndex: null,
   setHoveredStratumIndex: (hoveredStratumIndex) => set({ hoveredStratumIndex }),
 
+  isFrameloopSuspended: false,
+  isThemeTransitioning: false,
+  deferredThemeToggle: false,
+  setFrameloopSuspended: (isFrameloopSuspended) => set({ isFrameloopSuspended }),
+
   setFrameDistance: (frameDistance) => set({ frameDistance }),
-  setMode: (mode) => set({ mode }),
+  setMode: (mode) => {
+    set({ mode });
+    if (mode === 'instrument' && get().deferredThemeToggle) {
+      console.log('[theme] Handoff to instrument mode — executing deferred theme toggle');
+      set({ deferredThemeToggle: false });
+      setTimeout(() => {
+        get().toggleTheme();
+      }, 50);
+    }
+  },
   setTheme: (theme: AppTheme) => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('cortex.theme', theme);
@@ -423,17 +557,79 @@ export const useCortexStore = create<CortexState>((set, get) => ({
     set({ theme });
   },
   toggleTheme: () => {
-    const current = get().theme;
-    const next: AppTheme = current === 'night' ? 'paper' : 'night';
+    const { mode, isThemeTransitioning, theme } = get();
+    if (isThemeTransitioning) return;
+
+    if (mode === 'descent') {
+      console.log('[theme] Toggle requested during descent — deferred until instrument handoff');
+      set((s) => ({ deferredThemeToggle: !s.deferredThemeToggle }));
+      soundManager.play('tick');
+      return;
+    }
+
+    const next: AppTheme = theme === 'night' ? 'paper' : 'night';
     soundManager.play('tick');
-    get().setTheme(next);
+
+    if (!themeToggleDelegate) {
+      get().setTheme(next);
+      return;
+    }
+
+    // Redistributed work-spread toggle sequence:
+    // t=0: frameloop suspends immediately, prepare precomputed 3D values as plain data
+    const precomputed3D = compute3DThemeValues(next);
+    set({ isThemeTransitioning: true, isFrameloopSuspended: true });
+
+    themeToggleDelegate(
+      theme,
+      next,
+      // onApplyDomTokens (t≈50ms during veil rise):
+      // Apply CSS custom properties & document data-theme
+      () => {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('cortex.theme', next);
+        }
+        if (typeof document !== 'undefined') {
+          document.documentElement.setAttribute('data-theme', next);
+          document.body?.setAttribute('data-theme', next);
+        }
+        setActiveTheme(next);
+      },
+      // onSwapBackdrop (t≈100ms mid-veil rise):
+      () => {
+        // Backdrop handles direct DOM swap in its own callback
+      },
+      // onApplyReactTheme (t≈140ms under >90% solid veil):
+      // Normal async setState (NO flushSync)
+      () => {
+        set({ theme: next });
+      },
+      // onMidpoint3D (t≈190ms under solid veil opacity 1.0):
+      // Apply precomputed 3D uniform values as plain assignments + render ONE on-demand frame
+      () => {
+        if (typeof window !== 'undefined' && (window as any).__cortex_apply_3d_theme) {
+          (window as any).__cortex_apply_3d_theme(precomputed3D);
+        }
+        if (typeof window !== 'undefined' && (window as any).__cortex_render_frame) {
+          (window as any).__cortex_render_frame();
+        }
+      },
+      // onComplete (t=380ms veil fully lifted):
+      // Resume continuous frameloop
+      () => {
+        set({ isFrameloopSuspended: false, isThemeTransitioning: false });
+      }
+    );
   },
   setDescentProgress: (descentProgress) => set({ descentProgress }),
   setDampedDescentState: (dampedDescentProgress, currentBeatIndex) =>
     set({ dampedDescentProgress, currentBeatIndex }),
   setSelectedNodeId: (id) => {
     if (id) soundManager.play('tick');
-    set({ selectedNodeId: id });
+    set({
+      selectedNodeId: id,
+      ...(id ? { isRulesDrawerOpen: false } : {}),
+    });
   },
   setHoveredNodeId: (id) => set({ hoveredNodeId: id }),
 
@@ -666,6 +862,46 @@ export const useCortexStore = create<CortexState>((set, get) => ({
   setSimSelectedFactId: (simSelectedFactId) => set({ simSelectedFactId }),
   setSimEvidenceData: (simEvidenceData) => set({ simEvidenceData }),
   setSimEvidenceLoading: (simEvidenceLoading) => set({ simEvidenceLoading }),
+  simScrubIndex: null,
+  scrubSimulationTo: (eventIndex: number | null) => {
+    const events = get().simEvents;
+    const nodes = get().nodes;
+    if (eventIndex === null || eventIndex >= events.length) {
+      const { failedNodeIds, failedEntities, rulesFired } = computeSimStateAtEventIndex(events, events.length, nodes);
+      set({
+        simScrubIndex: null,
+        simFailedNodeIds: failedNodeIds,
+        simFailedEntities: failedEntities,
+        simRulesFired: rulesFired,
+      });
+    } else {
+      const clamped = Math.max(0, Math.min(eventIndex, events.length));
+      const { failedNodeIds, failedEntities, rulesFired } = computeSimStateAtEventIndex(events, clamped, nodes);
+      set({
+        simScrubIndex: clamped,
+        simFailedNodeIds: failedNodeIds,
+        simFailedEntities: failedEntities,
+        simRulesFired: rulesFired,
+      });
+    }
+  },
+
+  // The Tour State & Actions
+  isTourActive: false,
+  tourBeat: 0,
+  tourKicker: null,
+  tourCaption: null,
+  setTourActive: (isTourActive) => set({ isTourActive }),
+  setTourStep: (tourBeat, tourKicker, tourCaption) => set({ tourBeat, tourKicker, tourCaption }),
+
+  // World Framing
+  worldFramingTrigger: null,
+  triggerWorldFraming: (stamp?: string) => {
+    soundManager.play('glide');
+    set({ worldFramingTrigger: { stamp, timestamp: performance.now() } });
+  },
+  clearWorldFraming: () => set({ worldFramingTrigger: null }),
+
   clearSimulation: () =>
     set({
       queryMode: 'explore',
@@ -684,6 +920,7 @@ export const useCortexStore = create<CortexState>((set, get) => ({
       simEvidenceLoading: false,
       hoveredFiber: null,
       selectedRuleFilter: null,
+      simScrubIndex: null,
     }),
 
   // Inference Rules Implementation
@@ -704,17 +941,16 @@ export const useCortexStore = create<CortexState>((set, get) => ({
     }
   },
   setRulesDrawerOpen: (isRulesDrawerOpen) => {
-    set({ isRulesDrawerOpen });
+    set({
+      isRulesDrawerOpen,
+    });
     if (isRulesDrawerOpen) {
       get().loadRules();
     }
   },
   toggleRulesDrawer: () => {
     const next = !get().isRulesDrawerOpen;
-    set({ isRulesDrawerOpen: next });
-    if (next) {
-      get().loadRules();
-    }
+    get().setRulesDrawerOpen(next);
   },
   setSelectedRuleFilter: (selectedRuleFilter) => set({ selectedRuleFilter }),
 
@@ -758,6 +994,7 @@ export const useCortexStore = create<CortexState>((set, get) => ({
     simEvidenceData: null,
     simEvidenceLoading: false,
     hoveredFiber: null,
+    simScrubIndex: null,
   }),
 
   setFocusStratumIndex: (focusStratumIndex) => set({ focusStratumIndex }),
@@ -781,6 +1018,13 @@ export const useCortexStore = create<CortexState>((set, get) => ({
       mode: 'instrument',
       selectedNodeId: godId,
     });
+    if (get().deferredThemeToggle) {
+      console.log('[theme] Handoff to instrument mode — executing deferred theme toggle');
+      set({ deferredThemeToggle: false });
+      setTimeout(() => {
+        get().toggleTheme();
+      }, 50);
+    }
   },
 
   loadGraph: async (requestedAdapter: string, _forceIngest?: boolean, customPath?: string) => {
@@ -1041,6 +1285,12 @@ export const useCortexStore = create<CortexState>((set, get) => ({
       });
       throw err;
     }
+  },
+
+  recoverStaleSession: async () => {
+    const { adapter, customProjectPath } = get();
+    console.warn(`[cortex] Stale node ID detected. Auto-recovering session for adapter "${adapter}"...`);
+    await get().loadGraph(adapter, true, customProjectPath || undefined);
   },
 }));
 

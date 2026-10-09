@@ -97,10 +97,13 @@ export const Cursor: React.FC = () => {
         // Snap immediately if distance exceeds 80px or initial frame
         ringPos.current.x = px;
         ringPos.current.y = py;
-      } else {
+      } else if (dist > 0.05) {
         const k = 1 - Math.exp(-14 * dt);
         ringPos.current.x += dx * k;
         ringPos.current.y += dy * k;
+      } else {
+        animId = requestAnimationFrame(tick);
+        return;
       }
 
       if (ringRef.current) {
@@ -136,7 +139,7 @@ export const Cursor: React.FC = () => {
       {/* 1. Precise 4px dot tracking exact pointer */}
       <div
         ref={dotRef}
-        className="w-1 h-1 rounded-full bg-ink fixed top-0 left-0 transition-opacity duration-150"
+        className="w-1 h-1 rounded-full bg-ink fixed top-0 left-0 transition-opacity duration-micro ease-cortex"
         style={{
           opacity: isOverInput ? 0.3 : 1.0,
         }}
@@ -146,7 +149,7 @@ export const Cursor: React.FC = () => {
       {!isOverInput && (
         <div
           ref={ringRef}
-          className="fixed top-0 left-0 rounded-full border transition-[width,height,border-color] duration-150 ease-out flex items-center justify-center"
+          className="fixed top-0 left-0 rounded-full border transition-[width,height,border-color] duration-micro ease-cortex flex items-center justify-center"
           style={{
             width: `${ringSize}px`,
             height: `${ringSize}px`,

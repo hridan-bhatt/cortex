@@ -1,9 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { X, Zap } from 'lucide-react';
-import { gsap } from 'gsap';
+import { gsap, DURATION, CORTEX_EASE } from './motion';
 import { useCortexStore } from '../state/store';
-import { MagneticItem } from './useMagnetic';
 import { useTraceRunner } from './useTraceRunner';
+import { PanelShell, PanelHeader } from './PanelShell';
 
 export const TraceHud: React.FC = () => {
   const queryMode = useCortexStore((state) => state.queryMode);
@@ -26,38 +26,59 @@ export const TraceHud: React.FC = () => {
   const headerRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
 
-  // Entrance choreography: header letter-stagger, body slide up 12px
+  // Entrance choreography: HUD mount (240ms at 200ms delay, staggered rows 30ms)
   useEffect(() => {
     if (!containerRef.current) return;
 
-    gsap.set(containerRef.current, { opacity: 1, y: 0 });
-
-    if (headerRef.current) {
-      const letters = headerRef.current.querySelectorAll('.header-letter');
-      gsap.fromTo(
-        letters,
-        { opacity: 0 },
-        {
-          opacity: 1,
-          duration: 0.05,
-          stagger: 0.02,
-          ease: 'none',
-        }
-      );
-    }
+    gsap.fromTo(
+      containerRef.current,
+      { opacity: 0, y: 10 },
+      {
+        opacity: 1,
+        y: 0,
+        duration: DURATION.STANDARD,
+        delay: 0.20,
+        ease: CORTEX_EASE,
+        overwrite: 'auto',
+      }
+    );
 
     if (bodyRef.current) {
-      gsap.fromTo(
-        bodyRef.current,
-        { opacity: 0 },
-        {
-          opacity: 1,
-          duration: 0.15,
-          ease: 'power2.out',
-        }
-      );
+      const rows = bodyRef.current.querySelectorAll('.hud-row');
+      if (rows.length > 0) {
+        gsap.fromTo(
+          rows,
+          { opacity: 0, y: 4 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: DURATION.MICRO,
+            stagger: 0.03, // 30ms stagger
+            delay: 0.24,
+            ease: CORTEX_EASE,
+            overwrite: 'auto',
+          }
+        );
+      }
     }
   }, [traceData?.from, traceData?.to, reverseDepsData?.entity?.id]);
+
+  const handleClose = () => {
+    if (containerRef.current) {
+      gsap.to(containerRef.current, {
+        opacity: 0,
+        y: 6,
+        duration: DURATION.MICRO, // 140ms exit
+        ease: CORTEX_EASE,
+        overwrite: 'auto',
+        onComplete: () => {
+          clearTrace();
+        },
+      });
+    } else {
+      clearTrace();
+    }
+  };
 
   if (queryMode !== 'trace') {
     return null;
@@ -67,9 +88,13 @@ export const TraceHud: React.FC = () => {
   const activeError = traceError || reverseDepsError;
   if (activeError) {
     return (
-      <div
+      <PanelShell
         ref={containerRef}
-        className="hud-shell"
+        variant="hud-bottom"
+        isOpen={true}
+        onClose={handleClose}
+        escPriority={50}
+        className="p-3"
       >
         <div className="flex items-center justify-between">
           <span className="font-mono text-[11px] text-amber-500 tracking-tight truncate">
@@ -84,7 +109,7 @@ export const TraceHud: React.FC = () => {
             <X className="w-4 h-4" />
           </button>
         </div>
-      </div>
+      </PanelShell>
     );
   }
 
@@ -115,37 +140,34 @@ export const TraceHud: React.FC = () => {
     const headerText = `dependents — ${rootName}`;
 
     return (
-      <div
+      <PanelShell
         ref={containerRef}
-        className="hud-shell"
+        id="trace-reverse-hud"
+        testId="trace-hud"
+        ariaLabel="Reverse Dependencies HUD"
+        variant="hud-bottom"
+        isOpen={true}
+        onClose={handleClose}
+        escPriority={50}
       >
-        <div className="hud-header">
-          <div
-            ref={headerRef}
-            className="hud-title"
-          >
-            {headerText.split('').map((char, i) => (
-              <span
-                key={i}
-                className={`header-letter ${i >= 13 ? 'text-ink font-medium' : 'text-muted'}`}
-              >
-                {char}
-              </span>
-            ))}
-          </div>
-          <MagneticItem>
-            <button
-              type="button"
-              onClick={clearTrace}
-              className="text-muted hover:text-ink transition-colors p-1 -mr-1 -mt-1 cursor-pointer rounded-[2px]"
-              aria-label="Close trace HUD"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </MagneticItem>
-        </div>
+        <PanelHeader
+          title={
+            <div ref={headerRef} className="flex items-center min-w-0">
+              {headerText.split('').map((char, i) => (
+                <span
+                  key={i}
+                  className={`header-letter ${i >= 13 ? 'text-ink font-medium' : 'text-muted'}`}
+                >
+                  {char}
+                </span>
+              ))}
+            </div>
+          }
+          onClose={handleClose}
+          closeTitle="Close trace HUD"
+        />
 
-        <div ref={bodyRef}>
+        <div ref={bodyRef} className="p-3">
           {/* Reverse Deps Stat Anatomy */}
           <div className="py-2">
             <div className="font-mono text-[28px] text-ink font-medium leading-none">
@@ -187,7 +209,7 @@ export const TraceHud: React.FC = () => {
             })}
           </div>
         </div>
-      </div>
+      </PanelShell>
     );
   }
 
@@ -205,37 +227,34 @@ export const TraceHud: React.FC = () => {
     : '1.00';
 
   return (
-    <div
+    <PanelShell
       ref={containerRef}
-      className="hud-shell"
+      id="trace-path-hud"
+      testId="trace-hud"
+      ariaLabel="Trace Path HUD"
+      variant="hud-bottom"
+      isOpen={true}
+      onClose={clearTrace}
+      escPriority={50}
     >
-      <div className="hud-header">
-        <div
-          ref={headerRef}
-          className="hud-title"
-        >
-          {headerText.split('').map((char, i) => (
-            <span
-              key={i}
-              className={`header-letter ${i >= 8 ? 'text-ink font-medium' : 'text-muted'}`}
-            >
-              {char}
-            </span>
-          ))}
-        </div>
-        <MagneticItem>
-          <button
-            type="button"
-            onClick={clearTrace}
-            className="text-muted hover:text-ink transition-colors p-1 -mr-1 -mt-1 cursor-pointer rounded-[2px]"
-            aria-label="Close trace HUD"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </MagneticItem>
-      </div>
+      <PanelHeader
+        title={
+          <div ref={headerRef} className="flex items-center min-w-0">
+            {headerText.split('').map((char, i) => (
+              <span
+                key={i}
+                className={`header-letter ${i >= 8 ? 'text-ink font-medium' : 'text-muted'}`}
+              >
+                {char}
+              </span>
+            ))}
+          </div>
+        }
+        onClose={handleClose}
+        closeTitle="Close trace HUD"
+      />
 
-      <div ref={bodyRef}>
+      <div ref={bodyRef} className="p-3">
         {!traceData?.found ? (
           <div className="py-4 text-center">
             <div className="font-mono text-[12px] text-ink font-medium">
@@ -306,6 +325,6 @@ export const TraceHud: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
+    </PanelShell>
   );
 };

@@ -55,50 +55,50 @@
 :root[data-theme="paper"],
 [data-theme="paper"] {
   color-scheme: light;
-  --color-bg: #ECE7DE;
-  --color-surface: #F4F0E8;
-  --color-surface2: #FBF8F2;
-  --color-hairline: #D8D2C4;
-  --color-ink: #1A1815;
-  --color-muted: #615B4E;
-  --color-faint: #8B8370;
-  --color-failure: #C81E2E;
-  --color-ember: #C81E2E;
-  --color-accent: #8A6A1F;
-  --color-impact: #B0741A;
-  --color-selected: #1A1815;
-  --veil-opacity: 0.15;
+  --color-bg: #E6E0D3;
+  --color-surface: #EFEAE0;
+  --color-surface2: #F5F1E9;
+  --color-hairline: #C9C1AF;
+  --color-ink: #201C16;
+  --color-muted: #635D4F;
+  --color-faint: #807968;
+  --color-failure: #A82240;
+  --color-ember: #A82240;
+  --color-accent: #7E5F1B;
+  --color-impact: #9C6714;
+  --color-selected: #201C16;
+  --veil-opacity: 0.25;
 
-  --color-bg-rgb: 236 231 222;
-  --color-surface-rgb: 244 240 232;
-  --color-surface2-rgb: 251 248 242;
-  --color-hairline-rgb: 216 210 196;
-  --color-ink-rgb: 26 24 21;
-  --color-muted-rgb: 97 91 78;
-  --color-faint-rgb: 139 131 112;
-  --color-failure-rgb: 200 30 46;
-  --color-ember-rgb: 200 30 46;
-  --color-accent-rgb: 138 106 31;
-  --color-impact-rgb: 176 116 26;
-  --color-selected-rgb: 26 24 21;
+  --color-bg-rgb: 230 224 211;
+  --color-surface-rgb: 239 234 224;
+  --color-surface2-rgb: 245 241 233;
+  --color-hairline-rgb: 201 193 175;
+  --color-ink-rgb: 32 28 22;
+  --color-muted-rgb: 99 93 79;
+  --color-faint-rgb: 128 121 104;
+  --color-failure-rgb: 168 34 64;
+  --color-ember-rgb: 168 34 64;
+  --color-accent-rgb: 126 95 27;
+  --color-impact-rgb: 156 103 20;
+  --color-selected-rgb: 32 28 22;
 
-  --color-stratum-0: #A65A1D;
-  --color-stratum-1: #2E6397;
-  --color-stratum-2: #6E5590;
-  --color-stratum-3: #1F7A64;
-  --color-stratum-4: #5C7A2E;
-  --color-stratum-5: #A03E52;
-  --color-stratum-6: #4A4E56;
-  --color-stratum-7: #3E444E;
+  --color-stratum-0: #B84A1C;
+  --color-stratum-1: #1E5088;
+  --color-stratum-2: #583A82;
+  --color-stratum-3: #0E6E56;
+  --color-stratum-4: #526A18;
+  --color-stratum-5: #A82240;
+  --color-stratum-6: #3D434D;
+  --color-stratum-7: #262B33;
 
-  --color-stratum-0-rgb: 166 90 29;
-  --color-stratum-1-rgb: 46 99 151;
-  --color-stratum-2-rgb: 110 85 144;
-  --color-stratum-3-rgb: 31 122 100;
-  --color-stratum-4-rgb: 92 122 46;
-  --color-stratum-5-rgb: 160 62 82;
-  --color-stratum-6-rgb: 74 78 86;
-  --color-stratum-7-rgb: 62 68 78;
+  --color-stratum-0-rgb: 184 74 28;
+  --color-stratum-1-rgb: 30 80 136;
+  --color-stratum-2-rgb: 88 58 130;
+  --color-stratum-3-rgb: 14 110 86;
+  --color-stratum-4-rgb: 82 106 24;
+  --color-stratum-5-rgb: 168 34 64;
+  --color-stratum-6-rgb: 61 67 77;
+  --color-stratum-7-rgb: 38 43 51;
 }
 
 html, body {
@@ -107,20 +107,19 @@ html, body {
   padding: 0;
   background-color: var(--color-bg);
   color: var(--color-ink);
-  font-family: "Instrument Sans Variable", sans-serif;
-  transition: background-color 400ms cubic-bezier(0.16, 1, 0.3, 1),
-              color 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: "Space Grotesk", sans-serif;
+  transition: color 380ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 #root {
   width: 100%;
 }
 
-/* 400ms crossfade on all UI surfaces and panels */
-.bg-surface, .bg-surface2, .bg-bg, header, nav, aside, .hud-shell {
-  transition: background-color 400ms cubic-bezier(0.16, 1, 0.3, 1),
-              color 400ms cubic-bezier(0.16, 1, 0.3, 1),
-              border-color 400ms cubic-bezier(0.16, 1, 0.3, 1);
+/* 380ms crossfade on all UI surfaces and panels */
+.bg-surface, .bg-surface2, header, nav, aside, .hud-shell {
+  transition: background-color 380ms cubic-bezier(0.32, 0.72, 0, 1),
+              color 380ms cubic-bezier(0.32, 0.72, 0, 1),
+              border-color 380ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 /* In instrument mode, lock the viewport */

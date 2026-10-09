@@ -18,9 +18,17 @@ export function apiId(node: { id: string; entityId?: string }): string {
 }
 
 
-const BASE_URL =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
-  'http://localhost:8080';
+const getBaseUrl = (): string => {
+  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  if (typeof window !== 'undefined' && window.location.port !== '3000' && window.location.origin) {
+    return window.location.origin;
+  }
+  return 'http://localhost:8080';
+};
+
+const BASE_URL = getBaseUrl();
 
 export async function fetchAdapters(): Promise<AdapterDescriptor[]> {
   const response = await fetch(`${BASE_URL}/adapters`);

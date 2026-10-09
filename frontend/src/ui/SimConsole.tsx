@@ -17,6 +17,7 @@ import { useCortexStore } from '../state/store';
 import { useSimulateRunner } from './useSimulateRunner';
 import { fetchEvidence } from '../api/client';
 import { MagneticItem } from './useMagnetic';
+import { PanelShell } from './PanelShell';
 
 export const SimConsole: React.FC = () => {
   const mode = useCortexStore((state) => state.mode);
@@ -49,27 +50,82 @@ export const SimConsole: React.FC = () => {
 
   const { runSimulate, replaySimulation } = useSimulateRunner();
 
+  const simScrubIndex = useCortexStore((state) => state.simScrubIndex);
+  const scrubSimulationTo = useCortexStore((state) => state.scrubSimulationTo);
+
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
   const feedScrollRef = useRef<HTMLDivElement>(null);
 
-  // Esc key exit
-  useEffect(() => {
-    if (queryMode !== 'simulate') return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        clearSimulation();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [queryMode, clearSimulation]);
+  const isSimulationComplete = (simStatus === 'complete' || simStatus === 'fixpoint') && simEvents.length > 0;
+  const currentScrubPos = simScrubIndex !== null ? simScrubIndex : simEvents.length;
 
-  // Auto-scroll log feed to bottom as new events arrive
+  // Auto-scroll log feed to bottom as new events arrive (when not scrubbed)
   useEffect(() => {
-    if (feedScrollRef.current) {
+    if (simScrubIndex === null && feedScrollRef.current) {
       feedScrollRef.current.scrollTop = feedScrollRef.current.scrollHeight;
     }
-  }, [simEvents.length]);
+  }, [simEvents.length, simScrubIndex]);
+
+  // Scroll to scrubbed event row
+  useEffect(() => {
+    if (simScrubIndex !== null && feedScrollRef.current) {
+      const targetRow = feedScrollRef.current.querySelector(`[data-idx="${Math.max(0, simScrubIndex - 1)}"]`);
+      targetRow?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [simScrubIndex]);
+
+  // Esc key restores live fixpoint state when scrubbed
+  useEffect(() => {
+    if (simScrubIndex === null) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        scrubSimulationTo(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [simScrubIndex, scrubSimulationTo]);
+
+  const updateScrubFromPointer = (clientX: number) => {
+    if (!trackRef.current || simEvents.length === 0) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    const fraction = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    // Requirement 2B: position p in [0, 1] maps to floor(p * total)
+    const targetIndex = Math.min(simEvents.length, Math.floor(fraction * simEvents.length));
+    scrubSimulationTo(targetIndex);
+  };
+
+  const handleTrackPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    setIsDragging(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+    updateScrubFromPointer(e.clientX);
+  };
+
+  const handleTrackPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (rect) {
+      const fraction = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const idx = Math.min(simEvents.length - 1, Math.floor(fraction * simEvents.length));
+      setHoveredIndex(idx);
+    }
+    if (isDragging) {
+      updateScrubFromPointer(e.clientX);
+    }
+  };
+
+  const handleTrackPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDragging) {
+      setIsDragging(false);
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {}
+    }
+  };
 
   // Compute blast radius candidates when no simulation is running
   const candidates = useMemo(() => {
@@ -169,13 +225,19 @@ export const SimConsole: React.FC = () => {
       : 'text-muted bg-surface2 border-hairline';
 
   return (
-    <section
-      data-testid="sim-console"
-      aria-label="Simulation Reasoning Console"
-      className="fixed left-14 right-0 bottom-7 z-40 bg-surface border-t border-hairline shadow-2xl transition-all duration-200 pointer-events-auto select-none rounded-none"
+    <PanelShell
+      as="section"
+      id="sim-console"
+      testId="sim-console"
+      ariaLabel="Simulation Reasoning Console"
+      variant="custom"
+      className="fixed left-14 right-0 bottom-7 z-40 bg-surface border-t border-hairline shadow-2xl transition-all duration-standard ease-cortex pointer-events-auto select-none rounded-none"
       style={{
         boxShadow: '0 -8px 24px -4px rgb(var(--color-bg-rgb) / 0.75)',
       }}
+      isOpen={true}
+      onClose={clearSimulation}
+      escPriority={40}
     >
       <div className="h-10 px-3 border-b border-hairline flex items-center justify-between gap-3 bg-surface2/40">
         <div className="flex items-center gap-3">
@@ -248,6 +310,88 @@ export const SimConsole: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* 24px Scrubber Strip (Phase 2) */}
+      {!isCollapsed && isSimulationComplete && (
+        <div className="h-6 px-3 bg-surface2/60 border-b border-hairline flex items-center justify-between gap-3 text-mono text-[10px] select-none">
+          {/* Left: Scrubber title / Resume live */}
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-muted">
+              TIMELINE
+            </span>
+            {simScrubIndex !== null && (
+              <button
+                type="button"
+                onClick={() => scrubSimulationTo(null)}
+                className="px-1.5 py-0.2 font-mono text-[9px] uppercase tracking-wider text-failure border border-failure/40 bg-failure/10 hover:bg-failure/20 transition-colors rounded-[2px] cursor-pointer"
+                title="Restore fixpoint convergence state (Esc)"
+              >
+                Resume live
+              </button>
+            )}
+          </div>
+
+          {/* Center: The Track */}
+          <div
+            ref={trackRef}
+            onPointerDown={handleTrackPointerDown}
+            onPointerMove={handleTrackPointerMove}
+            onPointerUp={handleTrackPointerUp}
+            onPointerLeave={() => setHoveredIndex(null)}
+            className="flex-1 relative h-4 flex items-center cursor-ew-resize group"
+          >
+            {/* Background Hairline Track */}
+            <div className="absolute left-0 right-0 h-[1px] bg-hairline-bright" />
+
+            {/* Position Ticks at each event */}
+            {simEvents.map((_, idx) => {
+              const pct = (idx / (simEvents.length - 1 || 1)) * 100;
+              const isPassed = currentScrubPos > idx;
+              return (
+                <div
+                  key={idx}
+                  className={`absolute w-[1px] h-2 -translate-x-1/2 transition-colors ${
+                    isPassed ? 'bg-failure/70' : 'bg-muted/40'
+                  }`}
+                  style={{ left: `${pct}%` }}
+                />
+              );
+            })}
+
+            {/* Filled Progress Bar */}
+            <div
+              className="absolute left-0 h-[2px] bg-failure"
+              style={{ width: `${(currentScrubPos / (simEvents.length || 1)) * 100}%` }}
+            />
+
+            {/* Playhead */}
+            <div
+              className="absolute w-2 h-3.5 bg-ink border border-surface shadow-md -translate-x-1/2 rounded-[1px] pointer-events-none"
+              style={{ left: `${(currentScrubPos / (simEvents.length || 1)) * 100}%` }}
+            />
+
+            {/* Hover preview tooltip */}
+            {hoveredIndex !== null && (
+              <div
+                className="absolute -top-7 -translate-x-1/2 px-1.5 py-0.5 bg-surface2 border border-hairline text-ink font-mono text-[9px] rounded-[2px] shadow-lg pointer-events-none whitespace-nowrap z-50"
+                style={{ left: `${(hoveredIndex / (simEvents.length - 1 || 1)) * 100}%` }}
+              >
+                #{hoveredIndex + 1} · {simEvents[hoveredIndex]?.eventType?.replace(/_/g, ' ') || simEvents[hoveredIndex]?.type?.replace(/_/g, ' ') || 'EVENT'}
+                {simEvents[hoveredIndex]?.timestamp ? ` · ${new Date(simEvents[hoveredIndex].timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : ''}
+              </div>
+            )}
+          </div>
+
+          {/* Right: Event index readout */}
+          <div className="font-mono text-[10px] text-muted shrink-0 w-20 text-right">
+            <span className={simScrubIndex !== null ? 'text-ink font-semibold' : 'text-muted'}>
+              {currentScrubPos}
+            </span>
+            <span className="text-faint mx-1">/</span>
+            <span>{simEvents.length}</span>
+          </div>
+        </div>
+      )}
 
       {!isCollapsed && (
         <div className="h-44 flex divide-x divide-hairline">
@@ -329,11 +473,19 @@ export const SimConsole: React.FC = () => {
                   const totalFacts = ev.totalFacts ?? data.totalFacts ?? simFailedEntities.length;
                   const executionTime = ev.executionTime ?? data.executionTime ?? 0;
 
+                  const isFutureEvent = simScrubIndex !== null && idx >= simScrubIndex;
+                  const isCurrentScrubEvent = simScrubIndex !== null && idx === simScrubIndex - 1;
+
                   return (
                     <div
                       key={`${ev.sequenceNumber || idx}-${evType}`}
+                      data-idx={idx}
                       onClick={() => factId && handleFactClick(factId)}
-                      className={`flex items-center gap-2.5 px-2.5 py-1 border transition-colors rounded-[2px] ${
+                      className={`flex items-center gap-2.5 px-2.5 py-1 border transition-all rounded-[2px] ${
+                        isFutureEvent ? 'opacity-30' : ''
+                      } ${
+                        isCurrentScrubEvent ? 'ring-1 ring-failure/60 bg-failure/10' : ''
+                      } ${
                         factId ? 'cursor-pointer hover:bg-surface2/80' : ''
                       } ${
                         isFail
@@ -606,6 +758,6 @@ export const SimConsole: React.FC = () => {
           </div>
         </div>
       )}
-    </section>
+    </PanelShell>
   );
 };

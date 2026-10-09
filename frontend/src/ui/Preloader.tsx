@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
-import { gsap } from 'gsap';
+import { gsap, DURATION, CORTEX_EASE } from './motion';
 import { useCortexStore } from '../state/store';
 
 const STAGE_KEYS = ['ingest', 'graph', 'strata', 'layout', 'fibers'] as const;
@@ -49,8 +49,8 @@ export const Preloader: React.FC = () => {
 
       countTweenRef.current = gsap.to(counterObj, {
         val: nodes.length,
-        duration: 1.2,
-        ease: 'power2.out',
+        duration: DURATION.LARGE,
+        ease: CORTEX_EASE,
         onUpdate: () => {
           setDisplayCount(Math.round(counterObj.val));
         },
@@ -76,8 +76,8 @@ export const Preloader: React.FC = () => {
     if (contentRef.current) {
       tl.to(contentRef.current, {
         opacity: 0,
-        duration: 0.2,
-        ease: 'power1.out',
+        duration: DURATION.MICRO,
+        ease: CORTEX_EASE,
       });
     }
 
@@ -87,15 +87,15 @@ export const Preloader: React.FC = () => {
         { scaleX: 0, opacity: 1, transformOrigin: '0% 50%' },
         {
           scaleX: 1,
-          duration: 0.4,
-          ease: 'power2.inOut',
+          duration: DURATION.LARGE,
+          ease: CORTEX_EASE,
           onComplete: () => {
             dismissPreloader();
           },
         }
       );
     } else {
-      setTimeout(dismissPreloader, 400);
+      setTimeout(dismissPreloader, 380);
     }
   };
 

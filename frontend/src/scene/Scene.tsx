@@ -11,15 +11,23 @@ import { Lasso } from './Lasso';
 import { useCortexStore } from '../state/store';
 import { useDescentCamera } from '../descent/useDescentCamera';
 import { soundManager } from '../audio/synth';
-import { STRATA_DEFINITIONS } from '../domain/strata';
+import { STRATA_DEFINITIONS, Theme3DValues } from '../domain/strata';
 import { updateBackdropParallax } from '../ui/Backdrop';
 import { useImpactRunner } from '../ui/useImpactRunner';
+
+const _simCentroid = new THREE.Vector3();
+
+let globalFog: THREE.Fog | null = null;
+let globalHemi: THREE.HemisphereLight | null = null;
+let globalDir1: THREE.DirectionalLight | null = null;
+let globalDir2: THREE.DirectionalLight | null = null;
 
 const DynamicFog: React.FC = () => {
   const { scene } = useThree();
   const positions = useCortexStore((state) => state.positions);
   const frameDistance = useCortexStore((state) => state.frameDistance);
   const theme = useCortexStore((state) => state.theme);
+  const fogRef = useRef<THREE.Fog | null>(null);
 
   const { near, far } = useMemo(() => {
     if (positions.size === 0) return { near: 200, far: 800 };
@@ -47,9 +55,23 @@ const DynamicFog: React.FC = () => {
   }, [positions, frameDistance]);
 
   useEffect(() => {
-    const fogColor = theme === 'paper' ? '#ECE7DE' : '#0B0D12';
-    scene.fog = new THREE.Fog(fogColor, near, far);
-  }, [scene, near, far, theme]);
+    if (!fogRef.current) {
+      const initialColor = theme === 'paper' ? '#E6E0D3' : '#0B0D12';
+      const fog = new THREE.Fog(initialColor, near, far);
+      scene.fog = fog;
+      fogRef.current = fog;
+      globalFog = fog;
+    } else {
+      fogRef.current.near = near;
+      fogRef.current.far = far;
+    }
+  }, [scene, near, far]);
+
+  useEffect(() => {
+    if (!fogRef.current) return;
+    const targetHex = theme === 'paper' ? '#E6E0D3' : '#0B0D12';
+    fogRef.current.color.set(targetHex);
+  }, [theme]);
 
   return null;
 };
@@ -133,6 +155,8 @@ const CameraController: React.FC = () => {
 
   // Phase 1 Search & Fly-To
   const flyToTarget = useCortexStore((state) => state.flyToTarget);
+  const worldFramingTrigger = useCortexStore((state) => state.worldFramingTrigger);
+  const clearWorldFraming = useCortexStore((state) => state.clearWorldFraming);
   const adjacency = useCortexStore((state) => state.adjacency);
   const setPingNodeId = useCortexStore((state) => state.setPingNodeId);
   const setBracketTarget = useCortexStore((state) => state.setBracketTarget);
@@ -147,6 +171,7 @@ const CameraController: React.FC = () => {
   const prevModeRef = useRef<string>(mode);
   const prevAdapterRef = useRef<string>(adapter);
   const lastHandledFlyToRef = useRef<number>(0);
+  const lastWorldFramingRef = useRef<number>(0);
 
   // Initial / adapter-switch / handoff camera glide state (easeOutCubic)
   const isGliding = useRef<boolean>(false);
@@ -304,6 +329,26 @@ const CameraController: React.FC = () => {
       }
     }
   }, [adapter, nodes.length, positions, size.width, size.height, mode, setFrameDistance]);
+
+  // 2b. Programmatic World Framing Glide (e.g. Tour Beat 8)
+  useEffect(() => {
+    if (mode !== 'instrument' || !worldFramingTrigger) return;
+    if (worldFramingTrigger.timestamp === lastWorldFramingRef.current) return;
+    lastWorldFramingRef.current = worldFramingTrigger.timestamp;
+
+    const allPos = Array.from(positions.values());
+    if (allPos.length === 0) return;
+    const pose = computeFramingPose(allPos);
+    if (pose) {
+      triggerGlide(pose.endCam, pose.endLook, 1600, {
+        bracketInfo: {
+          positions: allPos,
+          stamp: worldFramingTrigger.stamp || `cortex · ${nodes.length} entities · ${useCortexStore.getState().edges.length} relationships`,
+        },
+      });
+    }
+    clearWorldFraming();
+  }, [worldFramingTrigger, mode, positions, nodes.length, clearWorldFraming]);
 
   // 3. Solo Stratum framing glide (1.2s easeOutCubic)
   useEffect(() => {
@@ -808,9 +853,9 @@ const CameraController: React.FC = () => {
         }
       });
       if (cnt > 0) {
-        const centroid = new THREE.Vector3(sx / cnt, sy / cnt, sz / cnt);
+        _simCentroid.set(sx / cnt, sy / cnt, sz / cnt);
         const kCentroid = 1 - Math.exp(-0.8 * Math.min(delta, 0.1));
-        controlsRef.current.target.lerp(centroid, kCentroid);
+        controlsRef.current.target.lerp(_simCentroid, kCentroid);
         controlsRef.current.update();
       }
     }
@@ -846,6 +891,113 @@ const CameraController: React.FC = () => {
   );
 };
 
+const LightingRig: React.FC = () => {
+  const theme = useCortexStore((state) => state.theme);
+  const hemiRef = useRef<THREE.HemisphereLight>(null);
+  const dir1Ref = useRef<THREE.DirectionalLight>(null);
+  const dir2Ref = useRef<THREE.DirectionalLight>(null);
+
+  useEffect(() => {
+    const isPaper = theme === 'paper';
+    const hemi = hemiRef.current;
+    const dir1 = dir1Ref.current;
+    const dir2 = dir2Ref.current;
+    if (!hemi || !dir1 || !dir2) return;
+
+    // Paper: warm Rembrandt studio lighting rig
+    // Night: dramatic cool-fill atmospheric rig
+    hemi.color.set(isPaper ? '#FAF7F0' : '#3A4152');
+    hemi.groundColor.set(isPaper ? '#C4BCA8' : '#0B0D12');
+    hemi.intensity = isPaper ? 0.75 : 0.35;
+
+    dir1.color.set(isPaper ? '#FFFBF5' : '#FFF4E0');
+    dir1.intensity = isPaper ? 1.25 : 0.85;
+    const dir1Pos = isPaper ? { x: -70, y: 110, z: 60 } : { x: 60, y: 90, z: 40 };
+    dir1.position.set(dir1Pos.x, dir1Pos.y, dir1Pos.z);
+
+    dir2.color.set(isPaper ? '#D8CFB8' : '#5C7CDB');
+    dir2.intensity = isPaper ? 0.20 : 0.35;
+    const dir2Pos = isPaper ? { x: 70, y: -40, z: -50 } : { x: -70, y: 30, z: -80 };
+    dir2.position.set(dir2Pos.x, dir2Pos.y, dir2Pos.z);
+  }, [theme]);
+
+  useEffect(() => {
+    globalHemi = hemiRef.current;
+    globalDir1 = dir1Ref.current;
+    globalDir2 = dir2Ref.current;
+  }, []);
+
+  const initialTheme = useCortexStore.getState().theme;
+  const isPaper = initialTheme === 'paper';
+
+  return (
+    <>
+      <hemisphereLight
+        ref={hemiRef}
+        args={[isPaper ? '#FAF7F0' : '#3A4152', isPaper ? '#C4BCA8' : '#0B0D12', isPaper ? 0.75 : 0.35]}
+      />
+      <directionalLight
+        ref={dir1Ref}
+        position={isPaper ? [-70, 110, 60] : [60, 90, 40]}
+        intensity={isPaper ? 1.25 : 0.85}
+        color={isPaper ? '#FFFBF5' : '#FFF4E0'}
+      />
+      <directionalLight
+        ref={dir2Ref}
+        position={isPaper ? [70, -40, -50] : [-70, 30, -80]}
+        intensity={isPaper ? 0.20 : 0.35}
+        color={isPaper ? '#D8CFB8' : '#5C7CDB'}
+      />
+    </>
+  );
+};
+
+const RenderGate: React.FC = () => {
+  const { gl, scene, camera, setFrameloop } = useThree();
+  useEffect(() => {
+    (window as any).__cortex_render_frame = () => {
+      gl.render(scene, camera);
+    };
+    (window as any).__cortex_apply_3d_theme = (values: Theme3DValues) => {
+      if (globalFog) {
+        globalFog.color.set(values.fogColor);
+      }
+      if (globalHemi) {
+        globalHemi.color.set(values.hemiSky);
+        globalHemi.groundColor.set(values.hemiGround);
+        globalHemi.intensity = values.hemiIntensity;
+      }
+      if (globalDir1) {
+        globalDir1.color.set(values.dir1Color);
+        globalDir1.intensity = values.dir1Intensity;
+        globalDir1.position.set(values.dir1Pos[0], values.dir1Pos[1], values.dir1Pos[2]);
+      }
+      if (globalDir2) {
+        globalDir2.color.set(values.dir2Color);
+        globalDir2.intensity = values.dir2Intensity;
+        globalDir2.position.set(values.dir2Pos[0], values.dir2Pos[1], values.dir2Pos[2]);
+      }
+      if ((window as any).__cortex_fiber_theme_uniform) {
+        (window as any).__cortex_fiber_theme_uniform.value = values.fiberTheme;
+      }
+    };
+
+    // Imperative subscription to frameloop suspension avoids React DOM re-renders of <Scene> or <Canvas>
+    const unsub = useCortexStore.subscribe((state, prevState) => {
+      if (state.isFrameloopSuspended !== prevState.isFrameloopSuspended) {
+        setFrameloop(state.isFrameloopSuspended ? 'never' : 'always');
+      }
+    });
+
+    return () => {
+      unsub();
+      delete (window as any).__cortex_render_frame;
+      delete (window as any).__cortex_apply_3d_theme;
+    };
+  }, [gl, scene, camera, setFrameloop]);
+  return null;
+};
+
 export const Scene: React.FC = () => {
   const mode = useCortexStore((state) => state.mode);
   const clearBracketTarget = useCortexStore((state) => state.clearBracketTarget);
@@ -853,11 +1005,11 @@ export const Scene: React.FC = () => {
   const setPingNodeId = useCortexStore((state) => state.setPingNodeId);
   const hoveredFiber = useCortexStore((state) => state.hoveredFiber);
   const hoveredNodeId = useCortexStore((state) => state.hoveredNodeId);
-  const theme = useCortexStore((state) => state.theme);
 
   return (
     <div className="w-full h-full relative">
       <Canvas
+        frameloop="always"
         camera={{
           fov: 45,
           position: [0, 140, 160],
@@ -869,6 +1021,7 @@ export const Scene: React.FC = () => {
           alpha: true,
           powerPreference: 'high-performance',
           toneMapping: THREE.NoToneMapping,
+          preserveDrawingBuffer: true,
         }}
         dpr={[1, 2]}
         onPointerDown={(e) => {
@@ -917,22 +1070,9 @@ export const Scene: React.FC = () => {
           }
         }}
       >
+        <RenderGate />
         <DynamicFog />
-
-        {/* Theme-tailored lighting rig (3D seating & additive law) */}
-        {theme === 'paper' ? (
-          <>
-            <hemisphereLight args={['#FFFFFF', '#D8D2C4', 0.85]} />
-            <directionalLight position={[50, 80, 40]} intensity={0.65} color="#FAF7F2" />
-            <directionalLight position={[-60, 40, -60]} intensity={0.30} color="#D8D2C4" />
-          </>
-        ) : (
-          <>
-            <hemisphereLight args={['#3A4152', '#0B0D12', 0.35]} />
-            <directionalLight position={[60, 90, 40]} intensity={0.85} color="#FFF4E0" />
-            <directionalLight position={[-70, 30, -80]} intensity={0.35} color="#5C7CDB" />
-          </>
-        )}
+        <LightingRig />
 
         <StrataGuides />
         <Fibers />

@@ -1,10 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 import { X, RefreshCw, ArrowRight } from 'lucide-react';
-import { gsap } from 'gsap';
+import { gsap, DURATION, CORTEX_EASE } from './motion';
 import { useCortexStore } from '../state/store';
-import { MagneticItem } from './useMagnetic';
 import { useCyclesRunner } from './useCyclesRunner';
 import { getStratumColor } from '../domain/strata';
+import { PanelShell, PanelHeader } from './PanelShell';
 
 function getEntityTypeColor(typeStr: string): string {
   const t = typeStr.toLowerCase();
@@ -32,37 +32,59 @@ export const WhatIfHud: React.FC = () => {
   const headerRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
 
+  // Entrance choreography: HUD mount (240ms at 200ms delay, staggered rows 30ms)
   useEffect(() => {
     if (!containerRef.current || !whatIfData) return;
 
-    gsap.set(containerRef.current, { opacity: 1, y: 0 });
-
-    if (headerRef.current) {
-      const letters = headerRef.current.querySelectorAll('.header-letter');
-      gsap.fromTo(
-        letters,
-        { opacity: 0 },
-        {
-          opacity: 1,
-          duration: 0.05,
-          stagger: 0.02,
-          ease: 'none',
-        }
-      );
-    }
+    gsap.fromTo(
+      containerRef.current,
+      { opacity: 0, y: 10 },
+      {
+        opacity: 1,
+        y: 0,
+        duration: DURATION.STANDARD,
+        delay: 0.20,
+        ease: CORTEX_EASE,
+        overwrite: 'auto',
+      }
+    );
 
     if (bodyRef.current) {
-      gsap.fromTo(
-        bodyRef.current,
-        { opacity: 0 },
-        {
-          opacity: 1,
-          duration: 0.15,
-          ease: 'power2.out',
-        }
-      );
+      const rows = bodyRef.current.querySelectorAll('.hud-row');
+      if (rows.length > 0) {
+        gsap.fromTo(
+          rows,
+          { opacity: 0, y: 4 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: DURATION.MICRO,
+            stagger: 0.03, // 30ms stagger
+            delay: 0.24,
+            ease: CORTEX_EASE,
+            overwrite: 'auto',
+          }
+        );
+      }
     }
   }, [whatIfData?.target?.id]);
+
+  const handleClose = () => {
+    if (containerRef.current) {
+      gsap.to(containerRef.current, {
+        opacity: 0,
+        y: 6,
+        duration: DURATION.MICRO, // 140ms exit
+        ease: CORTEX_EASE,
+        overwrite: 'auto',
+        onComplete: () => {
+          clearWhatIf();
+        },
+      });
+    } else {
+      clearWhatIf();
+    }
+  };
 
   if (queryMode !== 'whatif') {
     return null;
@@ -71,9 +93,13 @@ export const WhatIfHud: React.FC = () => {
   // Readable inline errors
   if (whatIfError) {
     return (
-      <div
+      <PanelShell
         ref={containerRef}
-        className="hud-shell"
+        variant="hud-bottom"
+        isOpen={true}
+        onClose={handleClose}
+        escPriority={50}
+        className="p-3"
       >
         <div className="flex items-center justify-between">
           <span className="font-mono text-[11px] text-amber-500 tracking-tight truncate">
@@ -88,7 +114,7 @@ export const WhatIfHud: React.FC = () => {
             <X className="w-4 h-4" />
           </button>
         </div>
-      </div>
+      </PanelShell>
     );
   }
 
@@ -125,37 +151,34 @@ export const WhatIfHud: React.FC = () => {
   const maxTypeCount = Math.max(1, ...typeCounts.map((t) => t.count));
 
   return (
-    <div
+    <PanelShell
       ref={containerRef}
-      className="hud-shell"
+      id="whatif-hud"
+      testId="whatif-hud"
+      ariaLabel="What-If Impact HUD"
+      variant="hud-bottom"
+      isOpen={true}
+      onClose={handleClose}
+      escPriority={50}
     >
-      <div className="hud-header">
-        <div
-          ref={headerRef}
-          className="hud-title"
-        >
-          {headerText.split('').map((char, i) => (
-            <span
-              key={i}
-              className={`header-letter ${i >= 10 ? 'text-ink font-medium' : 'text-muted'}`}
-            >
-              {char}
-            </span>
-          ))}
-        </div>
-        <MagneticItem>
-          <button
-            type="button"
-            onClick={clearWhatIf}
-            className="text-muted hover:text-ink transition-colors p-1 -mr-1 -mt-1 cursor-pointer rounded-[2px]"
-            aria-label="Close what-if HUD"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </MagneticItem>
-      </div>
+      <PanelHeader
+        title={
+          <div ref={headerRef} className="flex items-center min-w-0">
+            {headerText.split('').map((char, i) => (
+              <span
+                key={i}
+                className={`header-letter ${i >= 10 ? 'text-ink font-medium' : 'text-muted'}`}
+              >
+                {char}
+              </span>
+            ))}
+          </div>
+        }
+        onClose={handleClose}
+        closeTitle="Close what-if HUD"
+      />
 
-      <div ref={bodyRef}>
+      <div ref={bodyRef} className="p-3">
         {/* Main Impacted Count: Stat Anatomy */}
         <div className="py-2">
           <div className="font-mono text-[28px] text-ink font-medium leading-none">
@@ -228,6 +251,6 @@ export const WhatIfHud: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
+    </PanelShell>
   );
 };

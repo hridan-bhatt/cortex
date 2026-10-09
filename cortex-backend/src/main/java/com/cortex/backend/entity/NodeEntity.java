@@ -49,7 +49,11 @@ public class NodeEntity {
     @PrePersist
     protected void onCreate() {
         if (this.id == null || this.id.isBlank()) {
-            this.id = UUID.randomUUID().toString();
+            if (this.entityType != null && this.entityId != null) {
+                this.id = UUID.nameUUIDFromBytes((this.entityType + ":" + this.entityId).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+            } else {
+                this.id = UUID.randomUUID().toString();
+            }
         }
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();

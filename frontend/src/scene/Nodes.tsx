@@ -10,7 +10,20 @@ import { useTraceRunner } from '../ui/useTraceRunner';
 import { useWhatIfRunner } from '../ui/useWhatIfRunner';
 import { useSimulateRunner } from '../ui/useSimulateRunner';
 
+// Precomputed static theme colors (zero allocation in useFrame)
+const BG_NIGHT = new THREE.Color('#0B0D12');
+const BG_PAPER = new THREE.Color('#E6E0D3');
+const EMBER_NIGHT = new THREE.Color('#FF4553');
+const EMBER_PAPER = new THREE.Color('#A82240');
+const SELECTED_NIGHT = new THREE.Color('#F8FAFC');
+const SELECTED_PAPER = new THREE.Color('#201C16');
+const INK_NIGHT = new THREE.Color('#EAEDF4');
+const INK_PAPER = new THREE.Color('#201C16');
+const IMPACT_ACCENT_NIGHT = new THREE.Color('#FFB454');
+const IMPACT_ACCENT_PAPER = new THREE.Color('#7E5F1B');
 
+const STRATUM_HUES_NIGHT: THREE.Color[] = Array.from({ length: 8 }, (_, i) => new THREE.Color(getStratumColor(i, undefined, 'night')));
+const STRATUM_HUES_PAPER: THREE.Color[] = Array.from({ length: 8 }, (_, i) => new THREE.Color(getStratumColor(i, undefined, 'paper')));
 
 export const Nodes: React.FC = () => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -67,12 +80,12 @@ export const Nodes: React.FC = () => {
 
   const theme = useCortexStore((state) => state.theme);
 
-  // Custom Shader Material setup for per-instance inner emissive light (R1b & Phase 4a)
+  // Custom Shader Material setup: matte painted spheres on paper (roughness 0.82, metalness 0.0)
   const customMaterial = useMemo(() => {
     const isPaper = theme === 'paper';
     const mat = new THREE.MeshStandardMaterial({
-      roughness: isPaper ? 0.70 : 0.65,
-      metalness: isPaper ? 0.02 : 0.05,
+      roughness: isPaper ? 0.82 : 0.65,
+      metalness: isPaper ? 0.0 : 0.05,
       emissive: new THREE.Color(0xffffff),
       emissiveIntensity: 0.30,
       fog: false,
@@ -104,9 +117,8 @@ export const Nodes: React.FC = () => {
 
   useEffect(() => {
     if (customMaterial) {
-      customMaterial.roughness = theme === 'paper' ? 0.70 : 0.65;
-      customMaterial.metalness = theme === 'paper' ? 0.02 : 0.05;
-      customMaterial.needsUpdate = true;
+      customMaterial.roughness = theme === 'paper' ? 0.82 : 0.65;
+      customMaterial.metalness = theme === 'paper' ? 0.0 : 0.05;
     }
   }, [theme, customMaterial]);
 
@@ -116,10 +128,11 @@ export const Nodes: React.FC = () => {
     if (!mesh || nodes.length === 0) return;
 
     const count = nodes.length;
-    currentEmissive.current = new Float32Array(count).fill(0.30);
+    const initialE = theme === 'paper' ? 0.02 : 0.30;
+    currentEmissive.current = new Float32Array(count).fill(initialE);
     currentScaleMultipliers.current = new Float32Array(count).fill(1.0);
 
-    const emissiveArray = new Float32Array(count).fill(0.30);
+    const emissiveArray = new Float32Array(count).fill(initialE);
     const emissiveAttr = new THREE.InstancedBufferAttribute(emissiveArray, 1);
     mesh.geometry.setAttribute('aEmissive', emissiveAttr);
     emissiveAttrRef.current = emissiveAttr;
@@ -135,7 +148,7 @@ export const Nodes: React.FC = () => {
       mesh.setMatrixAt(i, tempObject.matrix);
 
       const sIdx = nodeStrata.get(node.id) ?? 6;
-      const hue = new THREE.Color(getStratumColor(sIdx, undefined, theme));
+      const hue = (theme === 'paper' ? STRATUM_HUES_PAPER : STRATUM_HUES_NIGHT)[sIdx] || STRATUM_HUES_NIGHT[6];
       mesh.setColorAt(i, hue);
     }
 
@@ -143,7 +156,7 @@ export const Nodes: React.FC = () => {
     if (mesh.instanceColor) {
       mesh.instanceColor.needsUpdate = true;
     }
-  }, [nodes, positions, radii, nodeStrata, tempObject, theme]);
+  }, [nodes, positions, radii, nodeStrata, tempObject]);
 
   // Active focus target (hovered or selected) for neighborhood lens bloom (R2)
   const activeFocusId = hoveredNodeId || selectedNodeId;
@@ -337,28 +350,32 @@ export const Nodes: React.FC = () => {
     const isImpactActive = Boolean(impactData) && mode === 'instrument';
 
     const isPaper = theme === 'paper';
-    const bgCol = isPaper ? new THREE.Color('#ECE7DE') : new THREE.Color('#0B0D12');
-    const emberCol = isPaper ? new THREE.Color('#C81E2E') : new THREE.Color('#FF4553');
-    const selectedCol = isPaper ? new THREE.Color('#1A1815') : new THREE.Color('#F8FAFC');
-    const inkCol = isPaper ? new THREE.Color('#1A1815') : new THREE.Color('#EAEDF4');
+    const bgCol = isPaper ? BG_PAPER : BG_NIGHT;
+    const emberCol = isPaper ? EMBER_PAPER : EMBER_NIGHT;
+    const selectedCol = isPaper ? SELECTED_PAPER : SELECTED_NIGHT;
+    const inkCol = isPaper ? INK_PAPER : INK_NIGHT;
+    const impactAccent = isPaper ? IMPACT_ACCENT_PAPER : IMPACT_ACCENT_NIGHT;
+    const stratumHues = isPaper ? STRATUM_HUES_PAPER : STRATUM_HUES_NIGHT;
 
     for (let i = 0; i < count; i++) {
       const node = nodes[i];
       const sIdx = nodeStrata.get(node.id) ?? 6;
-      const baseHue = new THREE.Color(getStratumColor(sIdx, undefined, theme));
+      const baseHue = stratumHues[sIdx] || stratumHues[6];
       const isSelected = node.id === selectedNodeId && mode === 'instrument';
       const isHovered = node.id === hoveredNodeId && mode === 'instrument';
       const isNeighbor = activeNeighbors.has(node.id) && mode === 'instrument';
       const isSoloed = soloStrata.has(sIdx);
 
-      let targetEmissive = 0.30;
+      let targetEmissive = isPaper ? 0.02 : 0.30;
       let targetScale = 1.0;
 
       if (isDescent) {
-        // In descent mode: 0.3 base emissive; nearest layer glows up to 0.75
+        // In descent mode: 0.3 base emissive (0.02 on paper); nearest layer glows up to 0.75 (0.35 on paper)
         targetColor.copy(baseHue);
         const isNearest = sIdx === descentLayerState.nearestStratumIndex;
-        targetEmissive = isNearest ? 0.30 + 0.45 * descentLayerState.proximity : 0.30;
+        targetEmissive = isNearest
+          ? (isPaper ? 0.04 + 0.30 * descentLayerState.proximity : 0.30 + 0.45 * descentLayerState.proximity)
+          : (isPaper ? 0.02 : 0.30);
         targetScale = 1.0;
       } else if (queryMode === 'trace' && traceData?.found) {
         const isEndpoint = node.id === traceSourceId || node.id === traceTargetId;
@@ -367,20 +384,20 @@ export const Nodes: React.FC = () => {
 
         if (isEndpoint) {
           targetColor.copy(selectedCol);
-          targetEmissive = 1.2;
+          targetEmissive = isPaper ? 0.50 : 1.2;
           targetScale = 1.1;
         } else if (isHoveredTrace) {
           targetColor.copy(inkCol);
-          targetEmissive = 1.0;
+          targetEmissive = isPaper ? 0.40 : 1.0;
           targetScale = 1.08;
         } else if (isPath) {
           targetColor.copy(baseHue);
-          targetEmissive = 0.95;
+          targetEmissive = isPaper ? 0.35 : 0.95;
           targetScale = 1.05;
         } else {
           // COLOR LAW: nodes never render grey; mix toward bg by AT MOST 40%
           targetColor.copy(baseHue).lerp(bgCol, 0.40);
-          targetEmissive = 0.16;
+          targetEmissive = isPaper ? 0.01 : 0.16;
           targetScale = 1.0;
         }
       } else if (queryMode === 'trace' && reverseDepsData) {
@@ -390,30 +407,30 @@ export const Nodes: React.FC = () => {
 
         if (isTarget) {
           targetColor.copy(selectedCol);
-          targetEmissive = 1.2;
+          targetEmissive = isPaper ? 0.50 : 1.2;
           targetScale = 1.1;
         } else if (isDep) {
-          targetColor.copy(baseHue).lerp(new THREE.Color(isPaper ? '#8A6A1F' : '#FFB454'), 0.55);
-          targetEmissive = 0.85;
+          targetColor.copy(baseHue).lerp(impactAccent, 0.55);
+          targetEmissive = isPaper ? 0.30 : 0.85;
           targetScale = 1.05;
         } else {
           targetColor.copy(baseHue).lerp(bgCol, 0.40);
-          targetEmissive = 0.16;
+          targetEmissive = isPaper ? 0.01 : 0.16;
           targetScale = 1.0;
         }
       } else if (queryMode === 'trace' && traceSourceId) {
         const isSource = node.id === traceSourceId;
         if (isSource) {
           targetColor.copy(selectedCol);
-          targetEmissive = 1.2;
+          targetEmissive = isPaper ? 0.50 : 1.2;
           targetScale = 1.1;
         } else if (isHovered) {
           targetColor.copy(baseHue);
-          targetEmissive = 1.0;
+          targetEmissive = isPaper ? 0.35 : 1.0;
           targetScale = 1.08;
         } else {
           targetColor.copy(baseHue);
-          targetEmissive = 0.30;
+          targetEmissive = isPaper ? 0.02 : 0.30;
           targetScale = 1.0;
         }
       } else if (queryMode === 'cycles' && cyclesData && cyclesData.totalCycles > 0) {
@@ -422,15 +439,17 @@ export const Nodes: React.FC = () => {
 
         if (isHoveredMember) {
           targetColor.copy(inkCol);
-          targetEmissive = 1.1;
+          targetEmissive = isPaper ? 0.40 : 1.1;
           targetScale = 1.08;
         } else if (isCycleMember) {
           targetColor.copy(baseHue);
-          targetEmissive = cyclesHoveredCycleId ? 0.50 : 0.90;
+          targetEmissive = isPaper
+            ? (cyclesHoveredCycleId ? 0.18 : 0.35)
+            : (cyclesHoveredCycleId ? 0.50 : 0.90);
           targetScale = 1.05;
         } else {
           targetColor.copy(baseHue).lerp(bgCol, 0.40);
-          targetEmissive = 0.16;
+          targetEmissive = isPaper ? 0.01 : 0.16;
           targetScale = 1.0;
         }
       } else if (queryMode === 'whatif' && whatIfData) {
@@ -439,23 +458,23 @@ export const Nodes: React.FC = () => {
 
         if (isTarget) {
           targetColor.copy(selectedCol);
-          targetEmissive = 1.2;
+          targetEmissive = isPaper ? 0.50 : 1.2;
           targetScale = 1.1;
         } else if (depth !== undefined) {
           targetColor.copy(baseHue);
           if (depth === 1) {
-            targetEmissive = 1.0;
+            targetEmissive = isPaper ? 0.35 : 1.0;
             targetScale = 1.05;
           } else if (depth === 2) {
-            targetEmissive = 0.75;
+            targetEmissive = isPaper ? 0.22 : 0.75;
             targetScale = 1.02;
           } else {
-            targetEmissive = 0.55;
+            targetEmissive = isPaper ? 0.12 : 0.55;
             targetScale = 1.0;
           }
         } else {
           targetColor.copy(baseHue).lerp(bgCol, 0.40);
-          targetEmissive = 0.16;
+          targetEmissive = isPaper ? 0.01 : 0.16;
           targetScale = 1.0;
         }
       } else if (queryMode === 'simulate') {
@@ -464,16 +483,18 @@ export const Nodes: React.FC = () => {
 
         if (isTarget) {
           targetColor.copy(emberCol);
-          targetEmissive = 1.25;
+          targetEmissive = isPaper ? 0.45 : 1.25;
           targetScale = 1.12;
         } else if (isFailed) {
           targetColor.copy(emberCol);
-          targetEmissive = simStatus === 'complete' || simStatus === 'fixpoint' ? 0.55 : 0.85;
+          targetEmissive = isPaper
+            ? (simStatus === 'complete' || simStatus === 'fixpoint' ? 0.18 : 0.30)
+            : (simStatus === 'complete' || simStatus === 'fixpoint' ? 0.55 : 0.85);
           targetScale = 1.05;
         } else {
           // COLOR LAW: Unaffected nodes dimmed by mixing AT MOST 40% toward bg; stratum hue identifiable
           targetColor.copy(baseHue).lerp(bgCol, 0.40);
-          targetEmissive = 0.16;
+          targetEmissive = isPaper ? 0.01 : 0.16;
           targetScale = 1.0;
         }
       } else if (isImpactActive) {
@@ -483,63 +504,63 @@ export const Nodes: React.FC = () => {
 
         if (isImpactTarget) {
           targetColor.copy(selectedCol);
-          targetEmissive = 1.2;
+          targetEmissive = isPaper ? 0.50 : 1.2;
           targetScale = 1.1;
         } else if (node.id === impactHoveredNodeId) {
           targetColor.copy(inkCol);
-          targetEmissive = 1.0;
+          targetEmissive = isPaper ? 0.35 : 1.0;
           targetScale = 1.1;
         } else if (isImpacted && impactDepth! <= impactWavefrontDepth) {
-          targetColor.copy(baseHue).lerp(new THREE.Color(isPaper ? '#8A6A1F' : '#FFB454'), 0.55);
-          targetEmissive = 0.85;
+          targetColor.copy(baseHue).lerp(impactAccent, 0.55);
+          targetEmissive = isPaper ? 0.30 : 0.85;
           targetScale = 1.05;
         } else {
           targetColor.copy(baseHue).lerp(bgCol, 0.40);
-          targetEmissive = 0.16;
+          targetEmissive = isPaper ? 0.01 : 0.16;
           targetScale = 1.0;
         }
       } else if (isSelected) {
         targetColor.copy(selectedCol);
-        targetEmissive = 1.2;
+        targetEmissive = isPaper ? 0.50 : 1.2;
         targetScale = isHovered ? 1.08 : 1.05;
       } else if (isHovered) {
         targetColor.copy(baseHue);
-        targetEmissive = 1.0;
+        targetEmissive = isPaper ? 0.35 : 1.0;
         targetScale = 1.08;
       } else if (isFocusActive) {
         if (isNeighbor) {
           targetColor.copy(baseHue);
-          targetEmissive = 0.75;
+          targetEmissive = isPaper ? 0.20 : 0.75;
           targetScale = 1.02;
         } else {
           targetColor.copy(baseHue).lerp(bgCol, 0.40);
-          targetEmissive = 0.16;
+          targetEmissive = isPaper ? 0.01 : 0.16;
           targetScale = 1.0;
         }
       } else if (hasSolo) {
         if (isSoloed) {
           targetColor.copy(baseHue);
-          targetEmissive = 0.70;
+          targetEmissive = isPaper ? 0.25 : 0.70;
           targetScale = 1.0;
         } else {
           targetColor.copy(baseHue).lerp(bgCol, 0.40);
-          targetEmissive = 0.16;
+          targetEmissive = isPaper ? 0.01 : 0.16;
           targetScale = 1.0;
         }
       } else if (hoveredStratumIndex !== null) {
         if (sIdx === hoveredStratumIndex) {
           targetColor.copy(baseHue);
-          targetEmissive = 0.70;
+          targetEmissive = isPaper ? 0.25 : 0.70;
           targetScale = 1.02;
         } else {
           targetColor.copy(baseHue).lerp(bgCol, 0.40);
-          targetEmissive = 0.16;
+          targetEmissive = isPaper ? 0.01 : 0.16;
           targetScale = 1.0;
         }
       } else {
-        // At rest in instrument mode: whisper of inner hue (0.30)
+        // At rest in instrument mode: whisper of inner hue (0.30 in night, 0.02 in paper)
         targetColor.copy(baseHue);
-        targetEmissive = 0.30;
+        targetEmissive = isPaper ? 0.02 : 0.30;
         targetScale = 1.0;
       }
 
@@ -550,7 +571,7 @@ export const Nodes: React.FC = () => {
         Math.abs(tempColor.g - targetColor.g) +
         Math.abs(tempColor.b - targetColor.b);
 
-      if (colorDiff > 0.002) {
+      if (colorDiff > 0.005) {
         tempColor.lerp(targetColor, k);
         mesh.setColorAt(i, tempColor);
         colorsNeedUpdate = true;
@@ -743,7 +764,7 @@ export const Nodes: React.FC = () => {
             ]}
           >
             <meshBasicMaterial
-              color="#F8FAFC"
+              color={theme === 'paper' ? '#201C16' : '#F8FAFC'}
               transparent
               opacity={0.9}
               side={THREE.DoubleSide}

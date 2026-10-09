@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, ChevronDown, Layers, Check, AlertCircle } from 'lucide-react';
-import { gsap } from 'gsap';
+import { gsap, DURATION, CORTEX_EASE } from './motion';
 import { useCortexStore } from '../state/store';
-import { getStratumColor } from '../domain/strata';
+import { getStratumColor, formatStratumLabel } from '../domain/strata';
 import { fetchCircularDependencies } from '../api/client';
+import { registerEscHandler, unregisterEscHandler } from './PanelShell';
 
 export const Navigator: React.FC = () => {
   const mode = useCortexStore((state) => state.mode);
@@ -21,8 +22,19 @@ export const Navigator: React.FC = () => {
   const setSelectedNodeId = useCortexStore((state) => state.setSelectedNodeId);
   const adapter = useCortexStore((state) => state.adapter);
   const setQueryMode = useCortexStore((state) => state.setQueryMode);
+  const setNavigatorOpen = useCortexStore((state) => state.setNavigatorOpen);
 
   const [cycleCount, setCycleCount] = useState<number | null>(null);
+
+  // Esc stack handler (priority 10 - lowest among active overlays)
+  useEffect(() => {
+    if (isNavigatorOpen) {
+      registerEscHandler('cortex-navigator', 10, () => setNavigatorOpen(false));
+    } else {
+      unregisterEscHandler('cortex-navigator');
+    }
+    return () => unregisterEscHandler('cortex-navigator');
+  }, [isNavigatorOpen, setNavigatorOpen]);
 
   // Fetch circular dependencies on load or adapter switch
   useEffect(() => {
@@ -158,8 +170,8 @@ export const Navigator: React.FC = () => {
       gsap.to(panelRef.current, {
         x: 0,
         opacity: 1,
-        duration: 0.26,
-        ease: 'power3.out',
+        duration: DURATION.STANDARD,
+        ease: CORTEX_EASE,
         overwrite: 'auto',
       });
 
@@ -173,9 +185,9 @@ export const Navigator: React.FC = () => {
           {
             opacity: 1,
             y: 0,
-            duration: 0.28,
-            stagger: 0.035,
-            ease: 'power2.out',
+            duration: DURATION.STANDARD,
+            stagger: 0.03,
+            ease: CORTEX_EASE,
             clearProps: 'transform,opacity',
           }
         );
@@ -184,8 +196,8 @@ export const Navigator: React.FC = () => {
       gsap.to(panelRef.current, {
         x: -320,
         opacity: 0,
-        duration: 0.26,
-        ease: 'power3.in',
+        duration: DURATION.MICRO,
+        ease: CORTEX_EASE,
         overwrite: 'auto',
         onComplete: () => {
           if (panelRef.current && !useCortexStore.getState().isNavigatorOpen) {
@@ -211,7 +223,7 @@ export const Navigator: React.FC = () => {
   return (
     <aside
       ref={panelRef}
-      className={`fixed top-12 left-14 bottom-6 w-60 bg-surface border-r border-hairline z-20 flex flex-col select-none overflow-hidden shadow-xl rounded-none ${
+      className={`fixed top-10 left-14 bottom-6 w-60 bg-surface border-r border-hairline z-20 flex flex-col select-none overflow-hidden shadow-xl rounded-none ${
         isNavigatorOpen ? 'pointer-events-auto' : 'pointer-events-none'
       }`}
       style={{
@@ -423,7 +435,7 @@ export const Navigator: React.FC = () => {
                       className="w-1.5 h-1.5 rounded-full shrink-0"
                       style={{ backgroundColor: hue }}
                     />
-                    <span className="font-sans text-[13px] text-ink font-medium truncate max-w-[125px]">
+                    <span className="font-sans text-[13px] text-ink font-semibold truncate max-w-[125px]">
                       {hub.entityName}
                     </span>
                   </div>
@@ -488,8 +500,8 @@ export const Navigator: React.FC = () => {
                           transform: isSoloed ? 'scale(1.25)' : 'scale(1)',
                         }}
                       />
-                      <span className="font-sans text-[13px] capitalize truncate">
-                        {meta.label.toLowerCase()}
+                      <span className="font-mono text-[11px] lowercase truncate group-hover:text-ink group-hover:underline group-hover:decoration-accent group-hover:decoration-2 group-hover:underline-offset-2">
+                        {formatStratumLabel(meta.stratumIndex, meta.label)}
                       </span>
                     </div>
 
@@ -525,7 +537,7 @@ export const Navigator: React.FC = () => {
                             onClick={() => handleEntityClick(entity.id)}
                             className="w-full px-2 py-0.5 rounded-[2px] flex items-center justify-between text-left hover:bg-surface2/80 transition-colors cursor-pointer group"
                           >
-                            <span className="font-sans text-[13px] text-muted group-hover:text-ink truncate max-w-[125px]">
+                            <span className="font-sans text-[13px] text-muted group-hover:text-ink font-semibold truncate max-w-[125px]">
                               {entity.entityName}
                             </span>
                             <span className="font-mono text-[11px] text-faint group-hover:text-muted">

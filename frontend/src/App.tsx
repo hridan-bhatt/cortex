@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { gsap } from 'gsap';
+import { gsap, DURATION, CORTEX_EASE } from './ui/motion';
 import { Scene } from './scene/Scene';
 import { TopBar } from './ui/TopBar';
 import { VerbRail } from './ui/VerbRail';
@@ -14,6 +14,8 @@ import { WhatIfHud } from './ui/WhatIfHud';
 import { SimConsole } from './ui/SimConsole';
 import { RulesDrawer } from './ui/RulesDrawer';
 import { ProvenanceStepper } from './ui/ProvenanceStepper';
+import { TourOverlay } from './tour/TourOverlay';
+import { useTour } from './tour/useTour';
 
 import { HintStrip } from './ui/HintStrip';
 import { StatusBar } from './ui/StatusBar';
@@ -31,6 +33,8 @@ export const App: React.FC = () => {
   const mode = useCortexStore((state) => state.mode);
   const loadGraph = useCortexStore((state) => state.loadGraph);
   const chromeRef = useRef<HTMLDivElement>(null);
+
+  const { startTour, abortTour } = useTour();
 
   const hasBootedRef = useRef(false);
 
@@ -69,9 +73,9 @@ export const App: React.FC = () => {
         {
           opacity: 1,
           y: 0,
-          duration: 0.5,
-          stagger: 0.08,
-          ease: 'power2.out',
+          duration: DURATION.LARGE,
+          stagger: 0.04,
+          ease: CORTEX_EASE,
           onComplete: () => {
             gsap.set(items, { clearProps: 'transform' });
           },
@@ -136,7 +140,7 @@ export const App: React.FC = () => {
         <>
           <div ref={chromeRef} className="relative z-10 w-full h-full pointer-events-none flex flex-col">
             <div className="chrome-fade-in pointer-events-auto">
-              <TopBar />
+              <TopBar onStartTour={startTour} onAbortTour={abortTour} />
             </div>
 
             <main className="flex-1 relative w-full overflow-hidden pointer-events-none">
@@ -174,6 +178,7 @@ export const App: React.FC = () => {
           <SimConsole />
           <RulesDrawer />
           <ProvenanceStepper />
+          <TourOverlay onAbort={abortTour} />
         </>
       )}
 

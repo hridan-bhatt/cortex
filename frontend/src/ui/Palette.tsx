@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
-import { gsap } from 'gsap';
+import { gsap, DURATION, CORTEX_EASE } from './motion';
 import { useCortexStore } from '../state/store';
 import { searchNodes, SearchMatch } from '../domain/search';
 import { getStratumColor } from '../domain/strata';
@@ -67,19 +67,20 @@ export const Palette: React.FC = () => {
         gsap.fromTo(
           modalRef.current,
           { opacity: 0 },
-          { opacity: 1, duration: 0.15, ease: 'power2.out' }
+          { opacity: 1, duration: DURATION.MICRO, ease: CORTEX_EASE, overwrite: 'auto' }
         );
       }
     }
   }, [isPaletteOpen]);
 
-  // Smooth close with 150ms fade
+  // Smooth close with 140ms fade
   const closePalette = (onDone?: () => void) => {
     if (modalRef.current) {
       gsap.to(modalRef.current, {
         opacity: 0,
-        duration: 0.15,
-        ease: 'power2.in',
+        duration: DURATION.MICRO,
+        ease: CORTEX_EASE,
+        overwrite: 'auto',
         onComplete: () => {
           setPaletteOpen(false);
           onDone?.();
@@ -213,7 +214,7 @@ export const Palette: React.FC = () => {
                         className="w-2 h-2 rounded-full shrink-0"
                         style={{ backgroundColor: stratumHue }}
                       />
-                      <span className="font-sans text-[13px] text-ink truncate">
+                      <span className="font-sans text-[13px] text-ink font-semibold truncate">
                         {nameContent}
                       </span>
                     </div>

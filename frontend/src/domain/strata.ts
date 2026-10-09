@@ -36,20 +36,63 @@ export const THEME_COLORS: Record<AppTheme, {
     selected: '#F8FAFC',
   },
   paper: {
-    bg: '#ECE7DE',
-    surface: '#F4F0E8',
-    surface2: '#FBF8F2',
-    hairline: '#D8D2C4',
-    ink: '#1A1815',
-    muted: '#615B4E',
-    faint: '#8B8370',
-    accent: '#8A6A1F',
-    impact: '#B0741A',
-    ember: '#C81E2E',
-    failure: '#C81E2E',
-    selected: '#1A1815',
+    bg: '#E6E0D3',
+    surface: '#EFEAE0',
+    surface2: '#F5F1E9',
+    hairline: '#C9C1AF',
+    ink: '#201C16',
+    muted: '#635D4F',
+    faint: '#807968',
+    accent: '#7E5F1B',
+    impact: '#9C6714',
+    ember: '#A82240',
+    failure: '#A82240',
+    selected: '#201C16',
   },
 };
+
+export interface Theme3DValues {
+  fogColor: string;
+  hemiSky: string;
+  hemiGround: string;
+  hemiIntensity: number;
+  dir1Color: string;
+  dir1Intensity: number;
+  dir1Pos: [number, number, number];
+  dir2Color: string;
+  dir2Intensity: number;
+  dir2Pos: [number, number, number];
+  fiberTheme: number;
+}
+
+export function compute3DThemeValues(theme: AppTheme): Theme3DValues {
+  const isPaper = theme === 'paper';
+  return {
+    fogColor: isPaper ? '#E6E0D3' : '#0B0D12',
+    hemiSky: isPaper ? '#FAF7F0' : '#3A4152',
+    hemiGround: isPaper ? '#C4BCA8' : '#0B0D12',
+    hemiIntensity: isPaper ? 0.75 : 0.35,
+    dir1Color: isPaper ? '#FFFBF5' : '#FFF4E0',
+    dir1Intensity: isPaper ? 1.25 : 0.85,
+    dir1Pos: isPaper ? [-70, 110, 60] : [60, 90, 40],
+    dir2Color: isPaper ? '#D8CFB8' : '#5C7CDB',
+    dir2Intensity: isPaper ? 0.20 : 0.35,
+    dir2Pos: isPaper ? [70, -40, -50] : [-70, 30, -80],
+    fiberTheme: isPaper ? 1.0 : 0.0,
+  };
+}
+
+export const STRATA_ROMAN = ['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii'] as const;
+
+export function getStratumRoman(index: number): string {
+  return STRATA_ROMAN[index] || String(index + 1);
+}
+
+export function formatStratumLabel(index: number, name: string, count?: number): string {
+  const roman = getStratumRoman(index);
+  const technical = name.toLowerCase();
+  return count !== undefined ? `${roman} · ${technical} · ${count}` : `${roman} · ${technical}`;
+}
 
 export const STRATUM_COLORS_BY_THEME: Record<AppTheme, Record<number, string>> = {
   night: {
@@ -63,14 +106,14 @@ export const STRATUM_COLORS_BY_THEME: Record<AppTheme, Record<number, string>> =
     7: '#606672', // EXTERNAL (graphite)
   },
   paper: {
-    0: '#A65A1D', // CONTROLLERS (dark ochre on paper)
-    1: '#2E6397', // SERVICES (deep steel blue)
-    2: '#6E5590', // COMPONENTS (deep violet)
-    3: '#1F7A64', // REPOSITORIES (deep jade)
-    4: '#5C7A2E', // DATA (deep olive)
-    5: '#A03E52', // CONFIG (deep rose)
-    6: '#4A4E56', // UNCLASSIFIED (dark neutral)
-    7: '#3E444E', // EXTERNAL (dark graphite)
+    0: '#B84A1C', // CONTROLLERS (warm terracotta ink — 4.1:1 contrast)
+    1: '#1E5088', // SERVICES (lapis blue ink — 5.9:1 contrast)
+    2: '#583A82', // COMPONENTS (royal iris ink — 6.8:1 contrast)
+    3: '#0E6E56', // REPOSITORIES (alpine viridian ink — 4.8:1 contrast)
+    4: '#526A18', // DATA (antique moss ink — 4.6:1 contrast)
+    5: '#A82240', // CONFIG (carmine cinnabar ink — 5.4:1 contrast)
+    6: '#3D434D', // UNCLASSIFIED (warm slate lead ink — 7.7:1 contrast)
+    7: '#262B33', // EXTERNAL (carbon black ink — 11.2:1 contrast)
   },
 };
 
@@ -195,10 +238,10 @@ export const HOSPITAL_STRATUM_COLORS_BY_THEME: Record<AppTheme, Record<number, s
     6: '#8A8E96', // UNCLASSIFIED (neutral)
   },
   paper: {
-    0: '#A65A1D', // PATIENTS (dark ochre)
-    1: '#6E5590', // PRESCRIPTIONS (deep violet)
-    2: '#1F7A64', // MEDICATIONS (deep jade)
-    6: '#4A4E56', // UNCLASSIFIED (dark neutral)
+    0: '#B84A1C', // PATIENTS (warm terracotta ink)
+    1: '#583A82', // PRESCRIPTIONS (royal iris ink)
+    2: '#0E6E56', // MEDICATIONS (alpine viridian ink)
+    6: '#3D434D', // UNCLASSIFIED (warm slate lead ink)
   },
 };
 

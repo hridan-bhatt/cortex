@@ -65,7 +65,7 @@ export const HintStrip: React.FC = () => {
 
   return (
     <div
-      className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-20 pointer-events-none transition-opacity duration-400 ease-out select-none ${
+      className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-20 pointer-events-none transition-opacity duration-large ease-cortex select-none ${
         isFadingOut ? 'opacity-0' : 'opacity-100'
       }`}
     >

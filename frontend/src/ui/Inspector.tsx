@@ -1,13 +1,13 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
-import { X, Zap, Activity } from 'lucide-react';
-import { gsap } from 'gsap';
+import { Zap, Activity } from 'lucide-react';
+import { gsap, DURATION, CORTEX_EASE } from './motion';
 import { useCortexStore } from '../state/store';
 import { NodeDto } from '../api/types';
 import { getStratumColor } from '../domain/strata';
 import { useImpactRunner } from './ImpactHud';
 import { useTraceRunner } from './useTraceRunner';
 import { useSimulateRunner } from './useSimulateRunner';
-import { MagneticItem } from './useMagnetic';
+import { PanelShell, PanelHeader, PanelStat, PanelActionButton } from './PanelShell';
 
 
 export const Inspector: React.FC = () => {
@@ -22,8 +22,6 @@ export const Inspector: React.FC = () => {
   const { runReverseDeps } = useTraceRunner();
   const { runSimulate } = useSimulateRunner();
 
-
-  const asideRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   // Active rendered node state for crossfade choreographies
@@ -43,12 +41,13 @@ export const Inspector: React.FC = () => {
       setRenderedNodeId(selectedNodeId);
       prevRenderedIdRef.current = selectedNodeId;
     } else if (prevRenderedIdRef.current !== selectedNodeId) {
-      // Node swap: crossfade out old content over 120ms, then swap and stagger in
+      // Node swap: crossfade out old content over 140ms, then swap and stagger in
       if (contentRef.current) {
         gsap.to(contentRef.current, {
           opacity: 0,
-          duration: 0.12,
-          ease: 'power1.in',
+          duration: DURATION.MICRO,
+          ease: CORTEX_EASE,
+          overwrite: 'auto',
           onComplete: () => {
             setRenderedNodeId(selectedNodeId);
             prevRenderedIdRef.current = selectedNodeId;
@@ -70,12 +69,14 @@ export const Inspector: React.FC = () => {
 
     gsap.fromTo(
       sections,
-      { opacity: 0 },
+      { opacity: 0, y: 4 },
       {
         opacity: 1,
-        duration: 0.15,
-        stagger: 0.02,
-        ease: 'power2.out',
+        y: 0,
+        duration: DURATION.MICRO,
+        stagger: 0.03, // 30ms stagger
+        ease: CORTEX_EASE,
+        overwrite: 'auto',
       }
     );
   }, [renderedNodeId]);
@@ -125,108 +126,69 @@ export const Inspector: React.FC = () => {
     return Object.entries(selectedNode.properties);
   }, [selectedNode]);
 
-  const isOpen = Boolean(selectedNodeId) && (queryMode === 'explore' || queryMode === 'impact');
+  const isRulesDrawerOpen = useCortexStore((state) => state.isRulesDrawerOpen);
+  const isOpen = Boolean(selectedNodeId) && !isRulesDrawerOpen && (queryMode === 'explore' || queryMode === 'impact');
 
   return (
-    <aside
-      ref={asideRef}
+    <PanelShell
       id="cortex-inspector"
-      data-testid="inspector"
-      className={`fixed top-12 right-0 bottom-0 w-[360px] bg-surface border-l border-hairline z-40 pointer-events-auto transition-transform duration-200 ease-out overflow-y-auto flex flex-col rounded-none ${
-        isOpen ? 'translate-x-0' : 'translate-x-full'
-      }`}
+      testId="inspector"
+      ariaLabel="Entity Inspector"
+      variant="drawer-right"
+      isOpen={isOpen}
+      onClose={() => setSelectedNodeId(null)}
+      className="overflow-y-auto"
+      escPriority={30}
     >
       {selectedNode && (
-        <div ref={contentRef} className="p-3 space-y-2.5 text-ink">
+        <div ref={contentRef} className="text-ink">
           {/* Section 1: Header row */}
-          <div className="inspector-section flex items-start justify-between gap-2 border-b border-hairline pb-2.5">
-            <div className="space-y-1 flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="font-sans text-[15px] text-ink font-medium leading-snug truncate">
-                  {selectedNode.entityName}
-                </h2>
-                {/* Stratum hue dot beside entityType */}
-                <div className="flex items-center gap-1.5 text-muted">
-                  <span
-                    className="w-1.5 h-1.5 rounded-full inline-block shrink-0"
-                    style={{ backgroundColor: selectedHue }}
-                  />
-                  <span className="font-mono text-[10px] uppercase tracking-[0.18em]">
-                    {selectedNode.entityType}
-                  </span>
-                </div>
-              </div>
-              <div className="font-mono text-[11px] text-muted break-all">
-                {selectedNode.entityId}
-              </div>
-            </div>
-            <MagneticItem>
-              <button
-                type="button"
-                onClick={() => setSelectedNodeId(null)}
-                className="text-muted hover:text-ink transition-colors p-1 -mr-1 -mt-1 cursor-pointer rounded-[2px]"
-                aria-label="Close inspector"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </MagneticItem>
-          </div>
+          <PanelHeader
+            title={selectedNode.entityName}
+            titleClassName="font-sans text-[13px] text-ink font-semibold tracking-tight truncate"
+            count={selectedNode.entityType}
+            icon={
+              <span
+                className="w-1.5 h-1.5 rounded-full inline-block shrink-0"
+                style={{ backgroundColor: selectedHue }}
+              />
+            }
+            onClose={() => setSelectedNodeId(null)}
+            closeTitle="Close inspector"
+          />
 
-          {/* Section 2: Degrees Stat Anatomy (mono value above, 10px muted label below, left-aligned) */}
-          <div className="inspector-section grid grid-cols-3 gap-3 py-1">
-            <div>
-              <div className="font-mono text-[20px] text-ink leading-tight font-medium">
-                {nodeDegree.inDegree}
-              </div>
-              <div className="font-mono text-[10px] text-muted uppercase tracking-[0.18em] mt-0.5">
-                incoming
-              </div>
+          <div className="p-3 space-y-2.5">
+            {/* Entity ID Subtitle */}
+            <div className="font-mono text-[11px] text-muted break-all -mt-1 pb-1 border-b border-hairline/60">
+              {selectedNode.entityId}
             </div>
-            <div>
-              <div className="font-mono text-[20px] text-ink leading-tight font-medium">
-                {nodeDegree.outDegree}
-              </div>
-              <div className="font-mono text-[10px] text-muted uppercase tracking-[0.18em] mt-0.5">
-                outgoing
-              </div>
-            </div>
-            <div>
-              <div className="font-mono text-[20px] text-ink leading-tight font-medium">
-                {nodeDegree.total}
-              </div>
-              <div className="font-mono text-[10px] text-muted uppercase tracking-[0.18em] mt-0.5">
-                total deg
-              </div>
-            </div>
-          </div>
 
-          {/* Section 3: Action rows (run impact & run reverse deps) */}
-          <div className="inspector-section space-y-1.5">
-            <button
-              type="button"
-              onClick={() => runImpact(selectedNode.id)}
-              className="w-full flex items-center justify-center gap-2 py-1.5 px-3 bg-surface2/60 border border-hairline hover:border-accent hover:text-accent text-ink font-mono text-[10px] tracking-[0.18em] uppercase transition-colors cursor-pointer rounded-[2px]"
-            >
-              <Zap className="w-3.5 h-3.5 text-accent" />
-              run impact
-            </button>
-            <button
-              type="button"
-              onClick={() => runReverseDeps(selectedNode.id)}
-              className="w-full flex items-center justify-center gap-2 py-1.5 px-3 bg-surface2/60 border border-hairline hover:border-accent hover:text-accent text-ink font-mono text-[10px] tracking-[0.18em] uppercase transition-colors cursor-pointer rounded-[2px]"
-            >
-              <Zap className="w-3.5 h-3.5 text-accent" />
-              run reverse deps
-            </button>
-            <button
-              type="button"
-              onClick={() => runSimulate(selectedNode.id)}
-              className="w-full flex items-center justify-center gap-2 py-1.5 px-3 bg-surface2/60 border border-hairline hover:border-failure hover:text-failure text-ink font-mono text-[10px] tracking-[0.18em] uppercase transition-colors cursor-pointer rounded-[2px]"
-            >
-              <Activity className="w-3.5 h-3.5 text-failure" />
-              simulate failure
-            </button>
-          </div>
+            {/* Section 2: Degrees Stat Anatomy (mono value above, 10px muted label below) */}
+            <div className="inspector-section grid grid-cols-3 gap-3 py-1">
+              <PanelStat value={nodeDegree.inDegree} label="incoming" />
+              <PanelStat value={nodeDegree.outDegree} label="outgoing" />
+              <PanelStat value={nodeDegree.total} label="total deg" />
+            </div>
+
+            {/* Section 3: Action rows (run impact & run reverse deps & simulate failure) */}
+            <div className="inspector-section space-y-1.5">
+              <PanelActionButton
+                icon={<Zap className="w-3.5 h-3.5 text-accent" />}
+                label="run impact"
+                onClick={() => runImpact(selectedNode.id)}
+              />
+              <PanelActionButton
+                icon={<Zap className="w-3.5 h-3.5 text-accent" />}
+                label="run reverse deps"
+                onClick={() => runReverseDeps(selectedNode.id)}
+              />
+              <PanelActionButton
+                icon={<Activity className="w-3.5 h-3.5 text-failure" />}
+                label="simulate failure"
+                onClick={() => runSimulate(selectedNode.id)}
+                className="hover:border-failure hover:text-failure"
+              />
+            </div>
 
           {/* Section 4: PROPERTIES section */}
           <div className="inspector-section">
@@ -290,7 +252,7 @@ export const Inspector: React.FC = () => {
                               className="w-1.5 h-1.5 rounded-full inline-block shrink-0"
                               style={{ backgroundColor: targetHue }}
                             />
-                            <span className="font-sans text-[13px] text-ink font-medium truncate group-hover:text-ink">
+                            <span className="font-sans text-[13px] text-ink font-semibold truncate group-hover:text-ink">
                               {targetName}
                             </span>
                           </div>
@@ -342,7 +304,7 @@ export const Inspector: React.FC = () => {
                               className="w-1.5 h-1.5 rounded-full inline-block shrink-0"
                               style={{ backgroundColor: sourceHue }}
                             />
-                            <span className="font-sans text-[13px] text-ink font-medium truncate group-hover:text-ink">
+                            <span className="font-sans text-[13px] text-ink font-semibold truncate group-hover:text-ink">
                               {sourceName}
                             </span>
                           </div>
@@ -362,8 +324,9 @@ export const Inspector: React.FC = () => {
               </ul>
             )}
           </div>
+          </div>
         </div>
       )}
-    </aside>
+    </PanelShell>
   );
 };

@@ -6,9 +6,9 @@ import { useCortexStore } from '../state/store';
 import { getStratumColor } from '../domain/strata';
 
 const NIGHT_BG = new THREE.Color('#0B0D12');
-const PAPER_BG = new THREE.Color('#ECE7DE');
+const PAPER_BG = new THREE.Color('#E6E0D3');
 const NIGHT_EMBER = new THREE.Color('#FF4553');
-const PAPER_EMBER = new THREE.Color('#C81E2E');
+const PAPER_EMBER = new THREE.Color('#A82240');
 
 function hashString(str: string): number {
   let h = 5381;
@@ -25,10 +25,16 @@ interface EdgeVertexRange {
   edgeIndex: number;
   sourceId: string;
   targetId: string;
+  sourceStratum: number;
+  targetStratum: number;
   sourceHue: THREE.Color;
   targetHue: THREE.Color;
   confidence: number;
 }
+
+// Precomputed static stratum colors for Fibers (zero allocation in useFrame)
+const STRATUM_COLORS_NIGHT: THREE.Color[] = Array.from({ length: 8 }, (_, i) => new THREE.Color(getStratumColor(i, undefined, 'night')));
+const STRATUM_COLORS_PAPER: THREE.Color[] = Array.from({ length: 8 }, (_, i) => new THREE.Color(getStratumColor(i, undefined, 'paper')));
 
 // Global hook / event channel for triggering fiber pulses during impact playback
 export type FiberPulseTrigger = (targetNodeId: string, timestamp: number) => void;
@@ -166,11 +172,20 @@ export const Fibers: React.FC = () => {
   const aRiverActiveAttrRef = useRef<THREE.BufferAttribute | null>(null);
   const aGlowAttrRef = useRef<THREE.BufferAttribute | null>(null);
   const lastRiverActiveKeyRef = useRef<string>('');
+  const lastTargetStateKeyRef = useRef<string>('');
+  const isConvergingRef = useRef<boolean>(true);
 
   // Shared uTime, uRiverIntensity, and uTheme uniforms
   const uTimeUniform = useMemo(() => ({ value: 0 }), []);
   const uRiverIntensity = useMemo(() => ({ value: 0 }), []);
   const uThemeUniform = useMemo(() => ({ value: 0 }), []);
+
+  useEffect(() => {
+    (window as any).__cortex_fiber_theme_uniform = uThemeUniform;
+    return () => {
+      delete (window as any).__cortex_fiber_theme_uniform;
+    };
+  }, [uThemeUniform]);
 
   // Custom standard material with shader injection
   const fiberMaterial = useMemo(() => {
@@ -234,9 +249,9 @@ export const Fibers: React.FC = () => {
 
          if (uTheme > 0.5) {
            // Paper mode: graphite pencil line + dark ink traveling beads
-           // Beads darken diffuse toward dark ink #1A1815 (vec3(0.102, 0.094, 0.082))
-           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.102, 0.094, 0.082), clamp(bead * 0.90 + pulseBead * 0.95, 0.0, 1.0));
-           totalEmissiveRadiance += vColor.rgb * vGlow * 0.08;
+           // Beads darken diffuse toward dark sumi ink (vec3(0.08, 0.07, 0.06))
+           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.08, 0.07, 0.06), clamp(bead * 0.90 + pulseBead * 0.95, 0.0, 1.0));
+           totalEmissiveRadiance = vec3(0.0);
          } else {
            // Night mode: fine filament in dark air with warm umber tint (vec3(1.05, 0.98, 0.90))
            totalEmissiveRadiance *= vColor.rgb;
@@ -328,9 +343,11 @@ export const Fibers: React.FC = () => {
       const tube = new THREE.TubeGeometry(curve, 12, radius, 4, false);
       const vCount = tube.attributes.position.count; // 65 vertices
 
+      const srcStratum = nodeStrata.get(edge.sourceId) ?? 6;
+      const tgtStratum = nodeStrata.get(edge.targetId) ?? 6;
       const activeBg = theme === 'paper' ? PAPER_BG : NIGHT_BG;
-      const srcHue = new THREE.Color(getStratumColor(nodeStrata.get(edge.sourceId) ?? 6, adapter, theme));
-      const tgtHue = new THREE.Color(getStratumColor(nodeStrata.get(edge.targetId) ?? 6, adapter, theme));
+      const srcHue = (theme === 'paper' ? STRATUM_COLORS_PAPER : STRATUM_COLORS_NIGHT)[srcStratum] || NIGHT_BG;
+      const tgtHue = (theme === 'paper' ? STRATUM_COLORS_PAPER : STRATUM_COLORS_NIGHT)[tgtStratum] || NIGHT_BG;
 
       ranges.push({
         start: currentVertex,
@@ -338,6 +355,8 @@ export const Fibers: React.FC = () => {
         edgeIndex: i,
         sourceId: edge.sourceId,
         targetId: edge.targetId,
+        sourceStratum: srcStratum,
+        targetStratum: tgtStratum,
         sourceHue: srcHue,
         targetHue: tgtHue,
         confidence: conf,
@@ -354,9 +373,10 @@ export const Fibers: React.FC = () => {
         allRiverActive.push(0.0);
         allGlow.push(0.45);
 
-        // Base gradient lerp: mix(sourceHue, bg, 0.62) -> mix(targetHue, bg, 0.62)
-        const sMix = srcHue.clone().lerp(activeBg, 0.62);
-        const tMix = tgtHue.clone().lerp(activeBg, 0.62);
+        // Base gradient lerp: mix(sourceHue, bg, 0.30 in paper / 0.62 in night)
+        const baseMixVal = theme === 'paper' ? 0.30 : 0.62;
+        const sMix = srcHue.clone().lerp(activeBg, baseMixVal);
+        const tMix = tgtHue.clone().lerp(activeBg, baseMixVal);
         const vCol = sMix.lerp(tMix, t);
 
         allBaseColors.push(vCol.r, vCol.g, vCol.b);
@@ -479,7 +499,7 @@ export const Fibers: React.FC = () => {
       triggerGlobalHopPulse = () => {};
       merged.dispose();
     };
-  }, [edges, positions, radii, nodeStrata, theme, adapter]);
+  }, [edges, positions, radii, nodeStrata, adapter]);
 
   // Pointermove raycaster for fiber hover inspection (R5b)
   useEffect(() => {
@@ -621,186 +641,193 @@ export const Fibers: React.FC = () => {
       targetRiverIntensity = 0.0; // REST: ZERO traveling beads
     }
 
-    // Base REST settings: 0.62 mix toward bg, base glow 0.45 (quiet structural pencil lines)
-    const restMix = complexityMode === 'min' ? 0.90 : 0.62;
-    const restGlow = complexityMode === 'min' ? 0.15 : 0.45;
+    // Base REST settings: 0.62 mix toward bg in night, 0.30 in paper (0.3mm graphite drafting line)
+    const restMix = complexityMode === 'min' ? 0.90 : (theme === 'paper' ? 0.30 : 0.62);
+    const restGlow = complexityMode === 'min' ? 0.15 : (theme === 'paper' ? 0.0 : 0.45);
 
-    const riverKey = `${mode}:${queryMode}:${activeNodeId || ''}:${hoveredFiber?.edgeIndex ?? -1}:${cyclesHoveredCycleId || ''}:${traceData?.found ? 't' : ''}:${reverseDepsData ? 'r' : ''}:${simFailedNodeIds.size}:${whatIfData ? 'w' : ''}:${impactData ? 'i' : ''}:${complexityMode}`;
+    const targetStateKey = `${theme}:${mode}:${queryMode}:${activeNodeId || ''}:${hoveredFiber?.edgeIndex ?? -1}:${cyclesHoveredCycleId || ''}:${traceData?.found ? 't' : ''}:${reverseDepsData ? 'r' : ''}:${simFailedNodeIds.size}:${whatIfData ? 'w' : ''}:${impactData ? 'i' : ''}:${complexityMode}`;
+    const updateTargets = targetStateKey !== lastTargetStateKeyRef.current;
+    if (updateTargets) {
+      lastTargetStateKeyRef.current = targetStateKey;
+      isConvergingRef.current = true;
+    }
+
     const riverAttr = aRiverActiveAttrRef.current;
     let riverAttrNeedsUpdate = false;
     const riverArr = riverAttr ? (riverAttr.array as Float32Array) : null;
-    const updateRiverAttr = riverKey !== lastRiverActiveKeyRef.current;
-    if (updateRiverAttr) {
-      lastRiverActiveKeyRef.current = riverKey;
-    }
 
     const isFiberHovered = Boolean(hoveredFiber && isInstrument && !hoveredNodeId);
     const hFiberEdge = hoveredFiber?.edge;
 
-    // 1. Compute target colors, glow, and river activity for each fiber
-    for (let rIdx = 0; rIdx < ranges.length; rIdx++) {
-      const range = ranges[rIdx];
+    // 1. Compute target colors, glow, and river activity for each fiber ONLY when state changed
+    if (updateTargets) {
+      for (let rIdx = 0; rIdx < ranges.length; rIdx++) {
+        const range = ranges[rIdx];
 
-      // Orb hover relationships & near edges (Hop-2)
-      const touchesActiveOrb = Boolean(
-        activeNodeId && (range.sourceId === activeNodeId || range.targetId === activeNodeId)
-      );
-      const isNearOrbEdge = Boolean(
-        !touchesActiveOrb &&
-        activeNodeId &&
-        (activeNeighborSet.has(range.sourceId) || activeNeighborSet.has(range.targetId))
-      );
+        // Orb hover relationships & near edges (Hop-2)
+        const touchesActiveOrb = Boolean(
+          activeNodeId && (range.sourceId === activeNodeId || range.targetId === activeNodeId)
+        );
+        const isNearOrbEdge = Boolean(
+          !touchesActiveOrb &&
+          activeNodeId &&
+          (activeNeighborSet.has(range.sourceId) || activeNeighborSet.has(range.targetId))
+        );
 
-      // Edge hover relationships & near edges
-      const isSelfFiberHovered = Boolean(isFiberHovered && hoveredFiber?.edgeIndex === range.edgeIndex);
-      const isNearFiberEdge = Boolean(
-        isFiberHovered &&
-        !isSelfFiberHovered &&
-        hFiberEdge &&
-        (range.sourceId === hFiberEdge.sourceId ||
-          range.targetId === hFiberEdge.sourceId ||
-          range.sourceId === hFiberEdge.targetId ||
-          range.targetId === hFiberEdge.targetId)
-      );
+        // Edge hover relationships & near edges
+        const isSelfFiberHovered = Boolean(isFiberHovered && hoveredFiber?.edgeIndex === range.edgeIndex);
+        const isNearFiberEdge = Boolean(
+          isFiberHovered &&
+          !isSelfFiberHovered &&
+          hFiberEdge &&
+          (range.sourceId === hFiberEdge.sourceId ||
+            range.targetId === hFiberEdge.sourceId ||
+            range.sourceId === hFiberEdge.targetId ||
+            range.targetId === hFiberEdge.targetId)
+        );
 
-      let mixBg = restMix;
-      let targetGlowVal = restGlow;
-      let targetRiverActive = 0.0;
-      let isEmberCascade = false;
+        let mixBg = restMix;
+        let targetGlowVal = restGlow;
+        let targetRiverActive = 0.0;
+        let isEmberCascade = false;
 
-      if (isDescent) {
-        mixBg = 0.45; // Calibrated descent palette: slightly livelier than instrument rest 0.62
-        targetGlowVal = 0.55;
-        targetRiverActive = 1.0;
-      } else if (isSelfFiberHovered) {
-        mixBg = 0.0; // Hovered edge blooms
-        targetGlowVal = 1.60;
-        targetRiverActive = 1.0;
-      } else if (isNearFiberEdge) {
-        mixBg = Math.max(0.0, restMix - 0.30); // Near edges catch reflection whisper (0.30 lift)
-        targetGlowVal = 0.85;
-        targetRiverActive = 0.0;
-      } else if (queryMode === 'simulate' && simFailedNodeIds.size > 0) {
-        const bothFailed = simFailedNodeIds.has(range.sourceId) && simFailedNodeIds.has(range.targetId);
-        const touchesFailed = simFailedNodeIds.has(range.sourceId) || simFailedNodeIds.has(range.targetId);
-        if (bothFailed) {
-          mixBg = 0.0;
-          isEmberCascade = true;
-          targetGlowVal = 1.60;
+        if (isDescent) {
+          mixBg = theme === 'paper' ? 0.25 : 0.45; // Calibrated descent palette
+          targetGlowVal = theme === 'paper' ? 0.10 : 0.55;
           targetRiverActive = 1.0;
-        } else if (touchesFailed) {
-          mixBg = 0.20;
-          targetGlowVal = 0.85;
+        } else if (isSelfFiberHovered) {
+          mixBg = 0.0; // Hovered edge blooms
+          targetGlowVal = theme === 'paper' ? 0.35 : 1.60;
+          targetRiverActive = 1.0;
+        } else if (isNearFiberEdge) {
+          mixBg = Math.max(0.0, restMix - 0.20); // Near edges catch reflection whisper
+          targetGlowVal = theme === 'paper' ? 0.15 : 0.85;
+          targetRiverActive = 0.0;
+        } else if (queryMode === 'simulate' && simFailedNodeIds.size > 0) {
+          const bothFailed = simFailedNodeIds.has(range.sourceId) && simFailedNodeIds.has(range.targetId);
+          const touchesFailed = simFailedNodeIds.has(range.sourceId) || simFailedNodeIds.has(range.targetId);
+          if (bothFailed) {
+            mixBg = 0.0;
+            isEmberCascade = true;
+            targetGlowVal = theme === 'paper' ? 0.35 : 1.60;
+            targetRiverActive = 1.0;
+          } else if (touchesFailed) {
+            mixBg = 0.20;
+            targetGlowVal = theme === 'paper' ? 0.20 : 0.85;
+            targetRiverActive = 1.0;
+          } else {
+            mixBg = restMix;
+            targetGlowVal = restGlow;
+            targetRiverActive = 0.0;
+          }
+        } else if (queryMode === 'trace' && traceData?.found) {
+          const edgeKey = `${range.sourceId}->${range.targetId}`;
+          const isPathFiber = pathEdgeSet.has(edgeKey);
+          mixBg = isPathFiber ? 0.0 : restMix;
+          targetGlowVal = isPathFiber ? (theme === 'paper' ? 0.35 : 1.60) : restGlow;
+          targetRiverActive = isPathFiber ? 1.0 : 0.0;
+        } else if (queryMode === 'trace' && reverseDepsData) {
+          const touchesDep = reverseDepsNodeSet.has(range.sourceId) || reverseDepsNodeSet.has(range.targetId);
+          mixBg = touchesDep ? 0.0 : restMix;
+          targetGlowVal = touchesDep ? (theme === 'paper' ? 0.35 : 1.60) : restGlow;
+          targetRiverActive = touchesDep ? 1.0 : 0.0;
+        } else if (queryMode === 'cycles' && cyclesData && cyclesData.totalCycles > 0) {
+          const edgeKey = `${range.sourceId}->${range.targetId}`;
+          const isHoveredCycle = cyclesEdgeSet.hovered.has(edgeKey);
+          const isAnyCycle = cyclesEdgeSet.all.has(edgeKey);
+          if (isHoveredCycle) {
+            mixBg = 0.0;
+            targetGlowVal = theme === 'paper' ? 0.35 : 1.60;
+            targetRiverActive = 1.0;
+          } else if (isAnyCycle) {
+            mixBg = cyclesHoveredCycleId ? 0.20 : 0.0;
+            targetGlowVal = theme === 'paper' ? 0.20 : 0.85;
+            targetRiverActive = 1.0;
+          } else {
+            mixBg = restMix;
+            targetGlowVal = restGlow;
+            targetRiverActive = 0.0;
+          }
+        } else if (queryMode === 'whatif' && whatIfData) {
+          const touchesAffected = whatIfAffectedNodeSet.has(range.sourceId) || whatIfAffectedNodeSet.has(range.targetId);
+          mixBg = touchesAffected ? 0.0 : restMix;
+          targetGlowVal = touchesAffected ? (theme === 'paper' ? 0.35 : 1.60) : restGlow;
+          targetRiverActive = touchesAffected ? 1.0 : 0.0;
+        } else if (queryMode === 'impact' && impactData) {
+          const touchesImpact = impactNodeSet.has(range.sourceId) || impactNodeSet.has(range.targetId);
+          mixBg = touchesImpact ? 0.0 : restMix;
+          targetGlowVal = touchesImpact ? (theme === 'paper' ? 0.35 : 1.60) : restGlow;
+          targetRiverActive = touchesImpact ? 1.0 : 0.0;
+        } else if (hasFocus) {
+          if (touchesActiveOrb) {
+            // Hop 1: Connected fibers bloom to full hue + river beads (FOCUS contract)
+            mixBg = 0.0;
+            targetGlowVal = theme === 'paper' ? 0.35 : 1.60;
+            targetRiverActive = 1.0;
+          } else if (isNearOrbEdge) {
+            // Hop 2: Two-hop spill whisper: fixed lift of 0.30 toward own hue (no beads, no motion)
+            mixBg = Math.max(0.0, restMix - 0.30);
+            targetGlowVal = theme === 'paper' ? 0.15 : 0.85;
+            targetRiverActive = 0.0;
+          } else {
+            // Hop 3+: Everything beyond two hops is PIXEL-IDENTICAL to rest
+            mixBg = restMix;
+            targetGlowVal = restGlow;
+            targetRiverActive = 0.0;
+          }
+        } else if (complexityMode === 'max') {
+          mixBg = restMix;
+          targetGlowVal = restGlow;
           targetRiverActive = 1.0;
         } else {
           mixBg = restMix;
           targetGlowVal = restGlow;
           targetRiverActive = 0.0;
         }
-      } else if (queryMode === 'trace' && traceData?.found) {
-        const edgeKey = `${range.sourceId}->${range.targetId}`;
-        const isPathFiber = pathEdgeSet.has(edgeKey);
-        mixBg = isPathFiber ? 0.0 : restMix;
-        targetGlowVal = isPathFiber ? 1.60 : restGlow;
-        targetRiverActive = isPathFiber ? 1.0 : 0.0;
-      } else if (queryMode === 'trace' && reverseDepsData) {
-        const touchesDep = reverseDepsNodeSet.has(range.sourceId) || reverseDepsNodeSet.has(range.targetId);
-        mixBg = touchesDep ? 0.0 : restMix;
-        targetGlowVal = touchesDep ? 1.60 : restGlow;
-        targetRiverActive = touchesDep ? 1.0 : 0.0;
-      } else if (queryMode === 'cycles' && cyclesData && cyclesData.totalCycles > 0) {
-        const edgeKey = `${range.sourceId}->${range.targetId}`;
-        const isHoveredCycle = cyclesEdgeSet.hovered.has(edgeKey);
-        const isAnyCycle = cyclesEdgeSet.all.has(edgeKey);
-        if (isHoveredCycle) {
-          mixBg = 0.0;
-          targetGlowVal = 1.60;
-          targetRiverActive = 1.0;
-        } else if (isAnyCycle) {
-          mixBg = cyclesHoveredCycleId ? 0.20 : 0.0;
-          targetGlowVal = 0.85;
-          targetRiverActive = 1.0;
-        } else {
-          mixBg = restMix;
-          targetGlowVal = restGlow;
-          targetRiverActive = 0.0;
+
+        if (riverArr) {
+          riverArr.fill(targetRiverActive, range.start, range.start + range.count);
+          riverAttrNeedsUpdate = true;
         }
-      } else if (queryMode === 'whatif' && whatIfData) {
-        const touchesAffected = whatIfAffectedNodeSet.has(range.sourceId) || whatIfAffectedNodeSet.has(range.targetId);
-        mixBg = touchesAffected ? 0.0 : restMix;
-        targetGlowVal = touchesAffected ? 1.60 : restGlow;
-        targetRiverActive = touchesAffected ? 1.0 : 0.0;
-      } else if (queryMode === 'impact' && impactData) {
-        const touchesImpact = impactNodeSet.has(range.sourceId) || impactNodeSet.has(range.targetId);
-        mixBg = touchesImpact ? 0.0 : restMix;
-        targetGlowVal = touchesImpact ? 1.60 : restGlow;
-        targetRiverActive = touchesImpact ? 1.0 : 0.0;
-      } else if (hasFocus) {
-        if (touchesActiveOrb) {
-          // Hop 1: Connected fibers bloom to full hue + river beads (FOCUS contract)
-          mixBg = 0.0;
-          targetGlowVal = 1.60;
-          targetRiverActive = 1.0;
-        } else if (isNearOrbEdge) {
-          // Hop 2: Two-hop spill whisper: fixed lift of 0.30 toward own hue (no beads, no motion)
-          mixBg = Math.max(0.0, restMix - 0.30); // 0.62 - 0.30 = 0.32
-          targetGlowVal = 0.85;
-          targetRiverActive = 0.0;
-        } else {
-          // Hop 3+: Everything beyond two hops is PIXEL-IDENTICAL to rest
-          mixBg = restMix;
-          targetGlowVal = restGlow;
-          targetRiverActive = 0.0;
+
+        const targetGlow = targetGlowRef.current;
+        for (let v = 0; v < range.count; v++) {
+          const ring = Math.floor(v / 5);
+          const t = ring / 12;
+          const vOffset = (range.start + v) * 3;
+          targetGlow[range.start + v] = targetGlowVal;
+
+          const stratumColors = theme === 'paper' ? STRATUM_COLORS_PAPER : STRATUM_COLORS_NIGHT;
+          const activeBg = theme === 'paper' ? PAPER_BG : NIGHT_BG;
+          const emberCol = theme === 'paper' ? PAPER_EMBER : NIGHT_EMBER;
+          const srcHue = stratumColors[range.sourceStratum] || activeBg;
+          const tgtHue = stratumColors[range.targetStratum] || activeBg;
+
+          // Base gradient from source to target hue
+          let rVal = THREE.MathUtils.lerp(srcHue.r, tgtHue.r, t);
+          let gVal = THREE.MathUtils.lerp(srcHue.g, tgtHue.g, t);
+          let bVal = THREE.MathUtils.lerp(srcHue.b, tgtHue.b, t);
+
+          if (isEmberCascade) {
+            rVal = THREE.MathUtils.lerp(rVal, emberCol.r, 0.75);
+            gVal = THREE.MathUtils.lerp(gVal, emberCol.g, 0.75);
+            bVal = THREE.MathUtils.lerp(bVal, emberCol.b, 0.75);
+          }
+
+          // Mix toward active theme bg
+          target[vOffset] = THREE.MathUtils.lerp(rVal, activeBg.r, mixBg);
+          target[vOffset + 1] = THREE.MathUtils.lerp(gVal, activeBg.g, mixBg);
+          target[vOffset + 2] = THREE.MathUtils.lerp(bVal, activeBg.b, mixBg);
         }
-      } else if (complexityMode === 'max') {
-        mixBg = restMix;
-        targetGlowVal = restGlow;
-        targetRiverActive = 1.0;
-      } else {
-        mixBg = restMix;
-        targetGlowVal = restGlow;
-        targetRiverActive = 0.0;
       }
 
-      if (updateRiverAttr && riverArr) {
-        riverArr.fill(targetRiverActive, range.start, range.start + range.count);
-        riverAttrNeedsUpdate = true;
-      }
-
-      const targetGlow = targetGlowRef.current;
-      for (let v = 0; v < range.count; v++) {
-        const ring = Math.floor(v / 5);
-        const t = ring / 12;
-        const vOffset = (range.start + v) * 3;
-        targetGlow[range.start + v] = targetGlowVal;
-
-        // Base gradient from source to target hue
-        let rVal = THREE.MathUtils.lerp(range.sourceHue.r, range.targetHue.r, t);
-        let gVal = THREE.MathUtils.lerp(range.sourceHue.g, range.targetHue.g, t);
-        let bVal = THREE.MathUtils.lerp(range.sourceHue.b, range.targetHue.b, t);
-
-        const activeBg = theme === 'paper' ? PAPER_BG : NIGHT_BG;
-        const emberCol = theme === 'paper' ? PAPER_EMBER : NIGHT_EMBER;
-
-        if (isEmberCascade) {
-          rVal = THREE.MathUtils.lerp(rVal, emberCol.r, 0.75);
-          gVal = THREE.MathUtils.lerp(gVal, emberCol.g, 0.75);
-          bVal = THREE.MathUtils.lerp(bVal, emberCol.b, 0.75);
-        }
-
-        // Mix toward active theme bg
-        target[vOffset] = THREE.MathUtils.lerp(rVal, activeBg.r, mixBg);
-        target[vOffset + 1] = THREE.MathUtils.lerp(gVal, activeBg.g, mixBg);
-        target[vOffset + 2] = THREE.MathUtils.lerp(bVal, activeBg.b, mixBg);
+      if (riverAttrNeedsUpdate && riverAttr) {
+        riverAttr.needsUpdate = true;
       }
     }
 
-    if (riverAttrNeedsUpdate && riverAttr) {
-      riverAttr.needsUpdate = true;
-    }
-
-    // 2. Continuous exponential ease: k = 1 - exp(-8 * dt), settle ~200ms, never snap
-    const k = 1 - Math.exp(-8 * Math.min(delta, 0.1));
+    // 2. Continuous exponential ease: k = 1 - exp(-12 * dt), smooth deceleration over full 240ms
+    const k = 1 - Math.exp(-12 * Math.min(delta, 0.1));
 
     // Smoothly ease uRiverIntensity uniform
     const currRiver = uRiverIntensity.value;
@@ -810,34 +837,40 @@ export const Fibers: React.FC = () => {
       uRiverIntensity.value = targetRiverIntensity;
     }
 
-    let colorsNeedUpdate = false;
-    let glowNeedsUpdate = false;
-    const len = current.length;
+    if (isConvergingRef.current) {
+      let colorsNeedUpdate = false;
+      let glowNeedsUpdate = false;
+      const len = current.length;
 
-    for (let i = 0; i < len; i++) {
-      const diff = target[i] - current[i];
-      if (Math.abs(diff) > 0.001) {
-        current[i] += diff * k;
-        colorsNeedUpdate = true;
+      for (let i = 0; i < len; i++) {
+        const diff = target[i] - current[i];
+        if (Math.abs(diff) > 0.003) {
+          current[i] += diff * k;
+          colorsNeedUpdate = true;
+        }
       }
-    }
 
-    const currentGlow = currentGlowRef.current;
-    const targetGlow = targetGlowRef.current;
-    const glowLen = currentGlow.length;
-    for (let i = 0; i < glowLen; i++) {
-      const gDiff = targetGlow[i] - currentGlow[i];
-      if (Math.abs(gDiff) > 0.002) {
-        currentGlow[i] += gDiff * k;
-        glowNeedsUpdate = true;
+      const currentGlow = currentGlowRef.current;
+      const targetGlow = targetGlowRef.current;
+      const glowLen = currentGlow.length;
+      for (let i = 0; i < glowLen; i++) {
+        const gDiff = targetGlow[i] - currentGlow[i];
+        if (Math.abs(gDiff) > 0.005) {
+          currentGlow[i] += gDiff * k;
+          glowNeedsUpdate = true;
+        }
       }
-    }
 
-    if (colorsNeedUpdate) {
-      colorAttr.needsUpdate = true;
-    }
-    if (glowNeedsUpdate && aGlowAttrRef.current) {
-      aGlowAttrRef.current.needsUpdate = true;
+      if (colorsNeedUpdate) {
+        colorAttr.needsUpdate = true;
+      }
+      if (glowNeedsUpdate && aGlowAttrRef.current) {
+        aGlowAttrRef.current.needsUpdate = true;
+      }
+
+      if (!colorsNeedUpdate && !glowNeedsUpdate) {
+        isConvergingRef.current = false;
+      }
     }
   });
 

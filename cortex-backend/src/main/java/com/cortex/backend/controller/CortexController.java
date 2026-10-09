@@ -76,8 +76,8 @@ public class CortexController {
         this.adapterRegistry = adapterRegistry;
     }
 
-//    ROOT
-    @GetMapping("/")
+//    STATUS
+    @GetMapping({"/api/status", "/status"})
     public ResponseEntity<Map<String, String>> root() {
         return ResponseEntity.ok(Map.of(
                 "status", "online",
@@ -329,7 +329,10 @@ public class CortexController {
     @GetMapping({"/dependencies/{entity_id}", "/traverse/impact/{entity_id}"})
     public ResponseEntity<GraphDtos.DependencyResponse> getDependencies(@PathVariable("entity_id") String entityId) {
         Optional<NodeEntity> nodeOpt = nodeRepo.findByIdOrEntityId(entityId);
-        String targetEntityId = nodeOpt.map(NodeEntity::getEntityId).orElse(entityId);
+        if (nodeOpt.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Entity '" + entityId + "' not found");
+        }
+        String targetEntityId = nodeOpt.get().getEntityId();
         return ResponseEntity.ok(traversalService.getDependencyChain(targetEntityId));
     }
 

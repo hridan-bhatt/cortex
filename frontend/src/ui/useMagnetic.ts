@@ -1,10 +1,10 @@
 import React, { useRef, useEffect } from 'react';
-import { gsap } from 'gsap';
+import { gsap, DURATION, CORTEX_EASE } from './motion';
 
 /**
  * Reusable magnetic micro-interaction hook.
  * Translates element up to maxDistance (default 2px) toward cursor on hover,
- * springs back over 200ms power2.out on leave.
+ * springs back over 140ms cortex ease on leave.
  */
 export function useMagnetic<T extends HTMLElement = HTMLButtonElement>(maxDistance: number = 2) {
   const ref = useRef<T>(null);
@@ -30,8 +30,8 @@ export function useMagnetic<T extends HTMLElement = HTMLButtonElement>(maxDistan
       gsap.to(el, {
         x: targetX,
         y: targetY,
-        duration: 0.15,
-        ease: 'power1.out',
+        duration: DURATION.MICRO,
+        ease: CORTEX_EASE,
         overwrite: 'auto',
       });
     };
@@ -40,8 +40,8 @@ export function useMagnetic<T extends HTMLElement = HTMLButtonElement>(maxDistan
       gsap.to(el, {
         x: 0,
         y: 0,
-        duration: 0.2,
-        ease: 'power2.out',
+        duration: DURATION.MICRO,
+        ease: CORTEX_EASE,
         overwrite: 'auto',
       });
     };

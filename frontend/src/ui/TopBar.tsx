@@ -1,11 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Volume2, VolumeX, HelpCircle, Sun, Moon, ScrollText, FolderOpen, X } from 'lucide-react';
+import { Search, Volume2, VolumeX, HelpCircle, Sun, Moon, ScrollText, FolderOpen, Play } from 'lucide-react';
 import { useCortexStore } from '../state/store';
 import { MagneticItem } from './useMagnetic';
 import { fetchAdapters } from '../api/client';
 import { AdapterDescriptor } from '../api/types';
+import { PanelShell, PanelHeader } from './PanelShell';
+import { CORTEX_CURVE } from './motion';
 
-export const TopBar: React.FC = () => {
+interface TopBarProps {
+  onStartTour?: () => void;
+  onAbortTour?: () => void;
+}
+
+export const TopBar: React.FC<TopBarProps> = ({ onStartTour, onAbortTour }) => {
   const adapter = useCortexStore((state) => state.adapter);
   const nodes = useCortexStore((state) => state.nodes);
   const edges = useCortexStore((state) => state.edges);
@@ -21,6 +28,7 @@ export const TopBar: React.FC = () => {
   const toggleTheme = useCortexStore((state) => state.toggleTheme);
   const isRulesDrawerOpen = useCortexStore((state) => state.isRulesDrawerOpen);
   const toggleRulesDrawer = useCortexStore((state) => state.toggleRulesDrawer);
+  const isTourActive = useCortexStore((state) => state.isTourActive);
   const customProjectName = useCortexStore((state) => state.customProjectName);
 
   const [isOpenDialogOpen, setIsOpenDialogOpen] = useState(false);
@@ -85,14 +93,15 @@ export const TopBar: React.FC = () => {
   const strataCount = strataMeta.length;
 
   return (
-    <header className="h-10 bg-surface border-b border-hairline flex items-center justify-between px-3 z-20 relative select-none rounded-none">
-      {/* Left: Brand & title */}
-      <div className="flex items-center">
-        <span className="font-mono text-[10px] tracking-[0.18em] text-ink uppercase font-medium">
-          CORTEX
-        </span>
-        <span className="text-faint mx-2 text-[10px]">·</span>
-        <span className="font-sans text-[11px] text-muted">
+    <header className="h-10 bg-surface border-b border-hairline flex items-center justify-between z-20 relative select-none rounded-none pr-3">
+      {/* Left: 56px Rail-aligned Brand compartment */}
+      <div className="flex items-center h-full">
+        <div className="w-14 h-full border-r border-hairline flex items-center justify-center shrink-0">
+          <span className="font-mono text-[10px] tracking-[0.18em] text-ink uppercase font-medium">
+            CORTEX
+          </span>
+        </div>
+        <span className="font-sans text-[11px] text-muted pl-3">
           codebase intelligence
         </span>
       </div>
@@ -162,6 +171,29 @@ export const TopBar: React.FC = () => {
           </button>
         </MagneticItem>
 
+        {/* Tour trigger button (Phase 1: lucide play, 16px, muted, hover ink) */}
+        <MagneticItem>
+          <button
+            type="button"
+            onClick={() => {
+              if (isTourActive) {
+                if (onAbortTour) onAbortTour();
+                else if (typeof window !== 'undefined' && (window as any).__cortex_tour) (window as any).__cortex_tour.abort();
+              } else {
+                if (onStartTour) onStartTour();
+                else if (typeof window !== 'undefined' && (window as any).__cortex_tour) (window as any).__cortex_tour.start();
+              }
+            }}
+            className={`p-1.5 transition-colors cursor-pointer border border-transparent hover:border-hairline rounded-[2px] ${
+              isTourActive ? 'text-ink' : 'text-muted hover:text-ink'
+            }`}
+            title={isTourActive ? 'Stop guided tour (Esc)' : 'Start guided tour (T)'}
+            aria-label={isTourActive ? 'Stop guided tour (Esc)' : 'Start guided tour (T)'}
+          >
+            <Play className="w-4 h-4" />
+          </button>
+        </MagneticItem>
+
         {/* Theme Toggle (Phase 1) */}
         <MagneticItem>
           <button
@@ -171,11 +203,24 @@ export const TopBar: React.FC = () => {
             title={theme === 'night' ? 'Switch to paper theme' : 'Switch to night theme'}
             aria-label={theme === 'night' ? 'Switch to paper theme' : 'Switch to night theme'}
           >
-            {theme === 'night' ? (
-              <Sun className="w-4 h-4" />
-            ) : (
-              <Moon className="w-4 h-4" />
-            )}
+            <div className="w-4 h-4 relative overflow-hidden">
+              <Sun
+                className="w-4 h-4 absolute inset-0"
+                style={{
+                  transform: theme === 'night' ? 'rotate(0deg) scale(1)' : 'rotate(90deg) scale(0)',
+                  opacity: theme === 'night' ? 1 : 0,
+                  transition: `transform 380ms ${CORTEX_CURVE}, opacity 380ms ${CORTEX_CURVE}`,
+                }}
+              />
+              <Moon
+                className="w-4 h-4 absolute inset-0"
+                style={{
+                  transform: theme === 'paper' ? 'rotate(0deg) scale(1)' : 'rotate(-90deg) scale(0)',
+                  opacity: theme === 'paper' ? 1 : 0,
+                  transition: `transform 380ms ${CORTEX_CURVE}, opacity 380ms ${CORTEX_CURVE}`,
+                }}
+              />
+            </div>
           </button>
         </MagneticItem>
 
@@ -250,91 +295,92 @@ export const TopBar: React.FC = () => {
       </div>
 
       {/* Open Project Dialog Modal (Phase 2B) */}
-      {isOpenDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 select-auto">
-          <div className="bg-surface border border-hairline rounded-[2px] p-5 w-[420px] max-w-[90vw] shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-hairline pb-2.5">
-              <span className="font-mono text-[10px] tracking-[0.18em] text-ink uppercase font-medium">
-                OPEN PROJECT
-              </span>
+      <PanelShell
+        id="open-project-modal"
+        testId="open-project-modal"
+        ariaLabel="Open Project Dialog"
+        variant="modal"
+        isOpen={isOpenDialogOpen}
+        onClose={() => {
+          setIsOpenDialogOpen(false);
+          setDialogError(null);
+        }}
+        escPriority={100}
+      >
+        <div className="bg-surface border border-hairline rounded-[2px] w-[420px] max-w-[90vw] shadow-2xl overflow-hidden">
+          <PanelHeader
+            title="OPEN PROJECT"
+            onClose={() => {
+              setIsOpenDialogOpen(false);
+              setDialogError(null);
+            }}
+            closeTitle="Close dialog"
+          />
+
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const cleanPath = projectPathInput.trim();
+              if (!cleanPath) {
+                setDialogError('Please enter a directory path');
+                return;
+              }
+              setIsSubmittingProject(true);
+              setDialogError(null);
+              try {
+                await loadGraph('java', true, cleanPath);
+                setIsOpenDialogOpen(false);
+                setProjectPathInput('');
+              } catch (err: any) {
+                setDialogError(err?.message || 'Failed to analyze project');
+              } finally {
+                setIsSubmittingProject(false);
+              }
+            }}
+            className="p-4 space-y-3"
+          >
+            <div>
+              <input
+                type="text"
+                value={projectPathInput}
+                onChange={(e) => {
+                  setProjectPathInput(e.target.value);
+                  if (dialogError) setDialogError(null);
+                }}
+                placeholder="C:\path\to\java\project"
+                className="w-full bg-surface2 border border-hairline rounded-[2px] px-3 py-1.5 font-mono text-[11px] text-ink placeholder:text-faint focus:outline-none focus:border-ink"
+                autoFocus
+              />
+            </div>
+
+            {dialogError && (
+              <div className="text-[10px] font-mono text-red-400 bg-red-500/10 border border-red-500/20 px-2.5 py-1.5 rounded-[2px] break-words">
+                {dialogError}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end space-x-2 pt-1">
               <button
                 type="button"
                 onClick={() => {
                   setIsOpenDialogOpen(false);
                   setDialogError(null);
                 }}
-                className="text-muted hover:text-ink cursor-pointer p-0.5"
-                aria-label="Close dialog"
+                className="px-2.5 py-1 font-mono text-[10px] uppercase text-muted hover:text-ink cursor-pointer"
               >
-                <X className="w-3.5 h-3.5" />
+                cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmittingProject}
+                className="px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-ink border border-hairline hover:border-ink transition-colors rounded-[2px] cursor-pointer disabled:opacity-50"
+              >
+                {isSubmittingProject ? 'analyzing…' : 'analyze'}
               </button>
             </div>
-
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const cleanPath = projectPathInput.trim();
-                if (!cleanPath) {
-                  setDialogError('Please enter a directory path');
-                  return;
-                }
-                setIsSubmittingProject(true);
-                setDialogError(null);
-                try {
-                  await loadGraph('java', true, cleanPath);
-                  setIsOpenDialogOpen(false);
-                  setProjectPathInput('');
-                } catch (err: any) {
-                  setDialogError(err?.message || 'Failed to analyze project');
-                } finally {
-                  setIsSubmittingProject(false);
-                }
-              }}
-              className="space-y-3"
-            >
-              <div>
-                <input
-                  type="text"
-                  value={projectPathInput}
-                  onChange={(e) => {
-                    setProjectPathInput(e.target.value);
-                    if (dialogError) setDialogError(null);
-                  }}
-                  placeholder="C:\path\to\java\project"
-                  className="w-full bg-surface2 border border-hairline rounded-[2px] px-3 py-1.5 font-mono text-[11px] text-ink placeholder:text-faint focus:outline-none focus:border-ink"
-                  autoFocus
-                />
-              </div>
-
-              {dialogError && (
-                <div className="text-[10px] font-mono text-red-400 bg-red-500/10 border border-red-500/20 px-2.5 py-1.5 rounded-[2px] break-words">
-                  {dialogError}
-                </div>
-              )}
-
-              <div className="flex items-center justify-end space-x-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsOpenDialogOpen(false);
-                    setDialogError(null);
-                  }}
-                  className="px-2.5 py-1 font-mono text-[10px] uppercase text-muted hover:text-ink cursor-pointer"
-                >
-                  cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingProject}
-                  className="px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-ink border border-hairline hover:border-ink transition-colors rounded-[2px] cursor-pointer disabled:opacity-50"
-                >
-                  {isSubmittingProject ? 'analyzing…' : 'analyze'}
-                </button>
-              </div>
-            </form>
-          </div>
+          </form>
         </div>
-      )}
+      </PanelShell>
     </header>
   );
 };

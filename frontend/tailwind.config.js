@@ -29,7 +29,7 @@ export default {
         stratum7: 'rgb(var(--color-stratum-7-rgb) / <alpha-value>)',
       },
       fontFamily: {
-        sans: ['"Instrument Sans Variable"', 'sans-serif'],
+        sans: ['"Space Grotesk"', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'monospace'],
       },
       borderRadius: {
@@ -40,6 +40,19 @@ export default {
         lg: '2px',
         xl: '2px',
         '2xl': '2px',
+      },
+      transitionTimingFunction: {
+        DEFAULT: 'cubic-bezier(0.32, 0.72, 0, 1)',
+        cortex: 'cubic-bezier(0.32, 0.72, 0, 1)',
+      },
+      transitionDuration: {
+        DEFAULT: '240ms',
+        micro: '140ms',
+        standard: '240ms',
+        large: '380ms',
+        140: '140ms',
+        240: '240ms',
+        380: '380ms',
       },
     },
   },

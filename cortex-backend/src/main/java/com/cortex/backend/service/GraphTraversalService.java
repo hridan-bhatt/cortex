@@ -41,12 +41,10 @@ public class GraphTraversalService {
 
         NodeEntity startNode = nodeByEntityId.get(startEntityId);
         if (startNode == null) {
-            GraphDtos.DependencyResponse resp = new GraphDtos.DependencyResponse();
-            resp.setId(startEntityId);
-            resp.setEntityId(startEntityId);
-            resp.setDependencyChain(List.of());
-            resp.setImpactedCount(0);
-            return resp;
+            startNode = nodeById.get(startEntityId);
+        }
+        if (startNode == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Entity '" + startEntityId + "' not found");
         }
 
         List<EdgeEntity> edges = edgeRepo.findAll();

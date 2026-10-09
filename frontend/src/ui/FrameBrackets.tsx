@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { gsap } from 'gsap';
+import { gsap, DURATION, CORTEX_EASE } from './motion';
 import { useCortexStore } from '../state/store';
 
 export const FrameBrackets: React.FC = () => {
@@ -16,7 +16,9 @@ export const FrameBrackets: React.FC = () => {
       if (containerRef.current) {
         gsap.to(containerRef.current, {
           opacity: 0,
-          duration: 0.15,
+          duration: DURATION.MICRO,
+          ease: CORTEX_EASE,
+          overwrite: 'auto',
           onComplete: () => setActiveTarget(null),
         });
       } else {
@@ -34,7 +36,8 @@ export const FrameBrackets: React.FC = () => {
       if (containerRef.current) {
         gsap.to(containerRef.current, {
           opacity: 0,
-          duration: 0.2,
+          duration: DURATION.MICRO,
+          ease: CORTEX_EASE,
           onComplete: () => {
             clearBracketTarget();
             setActiveTarget(null);
@@ -59,7 +62,8 @@ export const FrameBrackets: React.FC = () => {
       if (containerRef.current) {
         gsap.to(containerRef.current, {
           opacity: 0,
-          duration: 0.12,
+          duration: DURATION.MICRO,
+          ease: CORTEX_EASE,
           onComplete: () => {
             clearBracketTarget();
             setActiveTarget(null);
@@ -95,9 +99,9 @@ export const FrameBrackets: React.FC = () => {
       {
         scaleX: 1,
         scaleY: 1,
-        duration: 0.24,
-        stagger: 0.04,
-        ease: 'power2.out',
+        duration: DURATION.STANDARD,
+        stagger: 0.03,
+        ease: CORTEX_EASE,
       }
     );
 
@@ -105,7 +109,7 @@ export const FrameBrackets: React.FC = () => {
       gsap.fromTo(
         stampEl,
         { opacity: 0, y: 4 },
-        { opacity: 1, y: 0, duration: 0.2, ease: 'power2.out' }
+        { opacity: 1, y: 0, duration: DURATION.MICRO, ease: CORTEX_EASE }
       );
     }
   }, [activeTarget?.timestamp]);

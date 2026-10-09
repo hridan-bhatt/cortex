@@ -44,3 +44,9 @@ __pycache__/
 .env
 venv/
 .venv/
+
+# Built frontend static resources inside backend
+cortex-backend/src/main/resources/static/
+
+# Scratch scripts
+scratch/

@@ -19,20 +19,41 @@ export function useWhatIfRunner() {
     setWhatIfLoading(true);
     setWhatIfError(null);
 
-    try {
-      const idToFetch = apiId(targetNode);
-      const data = await fetchChangeImpact(idToFetch);
+    const execute = async (target: typeof targetNode, isRetry = false): Promise<void> => {
+      try {
+        const idToFetch = apiId(target);
+        const data = await fetchChangeImpact(idToFetch);
 
-      console.log(`[whatif] full change impact response for ${targetNode.entityName}:`, JSON.stringify(data, null, 2));
-      setWhatIfData(data);
-      setWhatIfLoading(false);
-    } catch (err: any) {
-      console.error('[whatif] Failed to analyze change impact:', err);
-      const statusMatch = String(err?.message || err).match(/\((\d+)\)/);
-      const status = statusMatch ? statusMatch[1] : err?.status || '500';
-      setWhatIfError(`what-if query failed — ${status}`);
-      setWhatIfLoading(false);
-    }
+        console.log(`[whatif] full change impact response for ${target.entityName}:`, JSON.stringify(data, null, 2));
+        setWhatIfData(data);
+        setWhatIfLoading(false);
+      } catch (err: any) {
+        const is404 = String(err?.message || err).includes('404') || err?.status === 404;
+        if (is404 && !isRetry) {
+          console.warn('[whatif] Traversal query returned 404. Initiating auto-recovery...');
+          try {
+            await useCortexStore.getState().recoverStaleSession();
+            const freshNodes = useCortexStore.getState().nodes;
+            const freshTarget = freshNodes.find(
+              (n) => n.id === target.id || n.entityName === target.entityName || n.entityId === target.entityId
+            );
+            if (freshTarget) {
+              setWhatIfTargetId(freshTarget.id);
+              return await execute(freshTarget, true);
+            }
+          } catch (recErr) {
+            console.error('[whatif] Auto-recovery failed:', recErr);
+          }
+        }
+        console.error('[whatif] Failed to analyze change impact:', err);
+        const statusMatch = String(err?.message || err).match(/\((\d+)\)/);
+        const status = statusMatch ? statusMatch[1] : (err?.status || (is404 ? '404' : '500'));
+        setWhatIfError(`what-if query failed — ${status}`);
+        setWhatIfLoading(false);
+      }
+    };
+
+    await execute(targetNode, false);
   }, [nodes, setQueryMode, setWhatIfTargetId, setWhatIfLoading, setWhatIfError, setWhatIfData]);
 
   return { runWhatIf };

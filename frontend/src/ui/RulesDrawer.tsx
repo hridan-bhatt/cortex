@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
-import { ScrollText, X, Filter, RefreshCw, Zap, Check } from 'lucide-react';
+import { ScrollText, Filter, RefreshCw, Zap, Check } from 'lucide-react';
 import { useCortexStore } from '../state/store';
 import { MagneticItem } from './useMagnetic';
+import { PanelShell, PanelHeader } from './PanelShell';
 
 const RULE_GLOSSES: Record<string, string> = {
   rule_dependency_impact:
@@ -52,27 +53,23 @@ export const RulesDrawer: React.FC = () => {
   const sortedRules = [...rules].sort((a, b) => (a.firingOrder || 0) - (b.firingOrder || 0));
 
   return (
-    <aside
-      data-testid="rules-drawer"
-      aria-label="Inference Rules Catalog"
-      className="fixed right-0 top-10 bottom-7 w-[360px] z-40 bg-surface border-l border-hairline shadow-2xl flex flex-col pointer-events-auto select-none rounded-none"
-      style={{
-        boxShadow: '-8px 0 24px -4px rgb(var(--color-bg-rgb) / 0.75)',
-      }}
+    <PanelShell
+      testId="rules-drawer"
+      ariaLabel="Inference Rules Catalog"
+      variant="drawer-right"
+      isOpen={isRulesDrawerOpen}
+      onClose={() => setRulesDrawerOpen(false)}
+      escPriority={30}
     >
-      {/* Header */}
-      <div className="h-10 px-3 border-b border-hairline flex items-center justify-between bg-surface2/40 shrink-0">
-        <div className="flex items-center gap-2">
-          <ScrollText className="w-3.5 h-3.5 text-stratum1" />
-          <span className="font-mono text-[10px] font-medium tracking-[0.18em] uppercase text-ink">
-            INFERENCE RULES
-          </span>
-          <span className="font-mono text-[9px] px-1.5 py-0.2 border border-hairline bg-surface text-muted rounded-[2px]">
-            {rules.length} RULES
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1.5">
+      {/* Unified Header */}
+      <PanelHeader
+        title="INFERENCE RULES"
+        count={rules.length}
+        countLabel="RULES"
+        icon={<ScrollText className="w-3.5 h-3.5 text-stratum1" />}
+        onClose={() => setRulesDrawerOpen(false)}
+        closeTitle="Close rules drawer (Esc or R)"
+        actions={
           <MagneticItem>
             <button
               type="button"
@@ -83,19 +80,8 @@ export const RulesDrawer: React.FC = () => {
               <RefreshCw className={`w-3 h-3 ${rulesLoading ? 'animate-spin' : ''}`} />
             </button>
           </MagneticItem>
-          <MagneticItem>
-            <button
-              type="button"
-              onClick={() => setRulesDrawerOpen(false)}
-              title="Close rules drawer (Esc or R)"
-              aria-label="Close rules drawer"
-              className="p-1 text-muted hover:text-ink transition-colors cursor-pointer rounded-[2px]"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </MagneticItem>
-        </div>
-      </div>
+        }
+      />
 
       {/* Active Filter Notification Bar */}
       {selectedRuleFilter && (
@@ -252,6 +238,6 @@ export const RulesDrawer: React.FC = () => {
           ESC
         </kbd>
       </div>
-    </aside>
+    </PanelShell>
   );
 };

@@ -9,7 +9,7 @@ import {
   Activity,
   HelpCircle,
 } from 'lucide-react';
-import { gsap } from 'gsap';
+import { gsap, DURATION, CORTEX_EASE } from './motion';
 import { useCortexStore } from '../state/store';
 
 export const HelpOverlay: React.FC = () => {
@@ -44,9 +44,9 @@ export const HelpOverlay: React.FC = () => {
         { opacity: 0 },
         {
           opacity: 1,
-          duration: 0.15,
+          duration: DURATION.MICRO,
           stagger: 0.02,
-          ease: 'power2.out',
+          ease: CORTEX_EASE,
           clearProps: 'opacity',
         }
       );
