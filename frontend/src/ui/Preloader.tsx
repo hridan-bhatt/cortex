@@ -10,6 +10,7 @@ export const Preloader: React.FC = () => {
   const preloaderStages = useCortexStore((state) => state.preloaderStages);
   const nodes = useCortexStore((state) => state.nodes);
   const dismissPreloader = useCortexStore((state) => state.dismissPreloader);
+  const preloaderNotice = useCortexStore((state) => state.preloaderNotice);
 
   const [displayCount, setDisplayCount] = useState<number>(0);
   const [isWiping, setIsWiping] = useState<boolean>(false);
@@ -179,8 +180,13 @@ export const Preloader: React.FC = () => {
         </div>
 
         {/* Bottom subtle bar */}
-        <div className="font-mono text-[10px] text-faint tracking-[0.18em]">
-          cortex v1.0 · deterministic architectural layout
+        <div className="font-mono text-[10px] text-faint tracking-[0.18em] flex items-center justify-between">
+          <div>cortex v1.0 · deterministic architectural layout</div>
+          {preloaderNotice && (
+            <div className="text-ember lowercase font-mono tracking-normal text-[11px]">
+              {preloaderNotice}
+            </div>
+          )}
         </div>
       </div>
 

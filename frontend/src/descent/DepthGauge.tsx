@@ -6,8 +6,10 @@ export const DepthGauge: React.FC = () => {
   const dampedDescentProgress = useCortexStore((state) => state.dampedDescentProgress);
   const currentBeatIndex = useCortexStore((state) => state.currentBeatIndex);
   const adapter = useCortexStore((state) => state.adapter);
+  const strataMeta = useCortexStore((state) => state.strataMeta);
+  const customProjectName = useCortexStore((state) => state.customProjectName);
 
-  const beats = getBeats(adapter);
+  const beats = getBeats(adapter, strataMeta, customProjectName || undefined);
   const activeBeat = beats[currentBeatIndex] || beats[0];
   const markerTopPercent = Math.min(100, Math.max(0, dampedDescentProgress * 100));
 

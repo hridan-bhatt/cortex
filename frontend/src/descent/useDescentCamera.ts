@@ -312,8 +312,13 @@ export function useDescentCamera() {
     if (positions.size === 0 || strataMeta.length === 0) return null;
 
     const isHospital = adapter === 'hospital';
-    const narrativeStrata = isHospital ? [0, 1, 2] : NARRATIVE_STRATA;
-    const numBeats = isHospital ? 5 : 8;
+    const isVaultX = adapter === 'vaultx';
+    const narrativeStrata = isHospital
+      ? [0, 1, 2]
+      : isVaultX
+      ? NARRATIVE_STRATA
+      : strataMeta.map((m) => m.stratumIndex);
+    const numBeats = narrativeStrata.length + 2;
 
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;

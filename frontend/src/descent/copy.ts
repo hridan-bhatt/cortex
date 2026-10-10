@@ -1,3 +1,5 @@
+import { getStratumRoman } from '../domain/strata';
+
 export interface BeatDefinition {
   id: number;
   label: string;
@@ -9,6 +11,7 @@ export interface BeatDefinition {
   cue?: string;
   buttonText?: string;
   countKey?: string;
+  stratumIndex?: number;
 }
 
 export interface BeatContext {
@@ -165,11 +168,169 @@ export const HOSPITAL_BEATS: BeatDefinition[] = [
   },
 ];
 
-export function getBeats(adapter: string = 'vaultx'): BeatDefinition[] {
+export interface StratumTemplate {
+  name: string;
+  shortGaugeLabel: string;
+  subtitle: string;
+  countKey?: string;
+}
+
+export const STRATUM_TEMPLATES: Record<number, StratumTemplate> = {
+  0: {
+    name: 'controllers',
+    shortGaugeLabel: 'CONTROLLERS',
+    subtitle: 'every request enters here.',
+    countKey: 'controllersCount',
+  },
+  1: {
+    name: 'services',
+    shortGaugeLabel: 'SERVICES',
+    subtitle: 'the work gets done here.',
+    countKey: 'servicesCount',
+  },
+  2: {
+    name: 'components',
+    shortGaugeLabel: 'COMPONENTS',
+    subtitle: 'mappers · handlers · guards.',
+    countKey: 'componentsCount',
+  },
+  3: {
+    name: 'repositories',
+    shortGaugeLabel: 'REPOSITORIES',
+    subtitle: 'everything saved, kept, remembered.',
+    countKey: 'repositoriesCount',
+  },
+  4: {
+    name: 'data',
+    shortGaugeLabel: 'DATA',
+    subtitle: 'the shape of what flows through.',
+    countKey: 'dataCount',
+  },
+  5: {
+    name: 'config',
+    shortGaugeLabel: 'CONFIG',
+    subtitle: 'wiring, properties, and runtime environment.',
+  },
+  6: {
+    name: 'unclassified',
+    shortGaugeLabel: 'UNCLASSIFIED',
+    subtitle: 'internal logic, utilities, and orphaned structures.',
+  },
+  7: {
+    name: 'external',
+    shortGaugeLabel: 'EXTERNAL',
+    subtitle: "everything above stands on code you didn't write.",
+    countKey: 'librariesCount',
+  },
+};
+
+export const HOSPITAL_STRATUM_TEMPLATES: Record<number, StratumTemplate> = {
+  0: {
+    name: 'patients',
+    shortGaugeLabel: 'PATIENTS',
+    subtitle: 'admissions, histories, and clinical records.',
+    countKey: 'patientsCount',
+  },
+  1: {
+    name: 'prescriptions',
+    shortGaugeLabel: 'RX',
+    subtitle: 'active orders linking patients to pharmaceutical care.',
+    countKey: 'prescriptionsCount',
+  },
+  2: {
+    name: 'medications',
+    shortGaugeLabel: 'DRUGS',
+    subtitle: 'pharmaceutical entities, contraindications, and conflict edges.',
+    countKey: 'medicationsCount',
+  },
+};
+
+export interface StratumBeatInput {
+  stratumIndex: number;
+  label: string;
+  nodeCount: number;
+}
+
+export function generateBeats(
+  adapter: string = 'vaultx',
+  strataMeta?: StratumBeatInput[],
+  projectName?: string
+): BeatDefinition[] {
+  if (adapter === 'vaultx') {
+    return VAULTX_BEATS;
+  }
   if (adapter === 'hospital') {
     return HOSPITAL_BEATS;
   }
-  return VAULTX_BEATS;
+
+  const activeStrata = strataMeta || [];
+  const beats: BeatDefinition[] = [];
+
+  // Surface beat: Beat 0
+  beats.push({
+    id: 0,
+    label: 'surface',
+    gaugeLabel: 'SURFACE',
+    alignment: 'left',
+    title: () => 'cortex',
+    subtitle: (ctx) => `codebase intelligence · ${ctx.projectName || projectName || 'custom'}`,
+    meta: (ctx) => `${ctx.entitiesCount} entities · ${ctx.relationshipsCount} relationships · one codebase`,
+    cue: 'scroll to descend',
+  });
+
+  // Intermediate beats: one per non-empty stratum
+  activeStrata.forEach((stratum, idx) => {
+    const k = idx + 1;
+    const roman = getStratumRoman(idx);
+    const template = STRATUM_TEMPLATES[stratum.stratumIndex] || {
+      name: stratum.label.toLowerCase(),
+      shortGaugeLabel: stratum.label.toUpperCase(),
+      subtitle: 'structural tier of the system.',
+    };
+
+    const techName = template.name;
+    const countKey = template.countKey;
+
+    beats.push({
+      id: k,
+      label: `layer ${roman} — ${techName}`,
+      gaugeLabel: `L-${roman.toUpperCase()} · ${template.shortGaugeLabel}`,
+      alignment: idx % 2 === 0 ? 'right' : 'left',
+      title: () => `layer ${roman} — ${techName}`,
+      subtitle: template.subtitle,
+      meta: (ctx) => {
+        const count = countKey && (ctx as any)[countKey] !== undefined
+          ? (ctx as any)[countKey]
+          : stratum.nodeCount;
+        return `${roman} · ${techName} · ${count}`;
+      },
+      countKey: countKey,
+      stratumIndex: stratum.stratumIndex,
+    });
+  });
+
+  // Arrival beat
+  const arrivalId = activeStrata.length + 1;
+  beats.push({
+    id: arrivalId,
+    label: 'arrival',
+    gaugeLabel: 'ARRIVAL',
+    alignment: 'center',
+    title: () => 'start with the heart.',
+    meta: (ctx) => `${ctx.godClassName.toLowerCase()} — ${ctx.godClassOutDegree} outgoing dependencies`,
+    buttonText: 'enter the codebase',
+    countKey: 'godClassOutDegree',
+  });
+
+  return beats;
+}
+
+export function getBeats(
+  adapter: string = 'vaultx',
+  strataMeta?: StratumBeatInput[],
+  projectName?: string
+): BeatDefinition[] {
+  return generateBeats(adapter, strataMeta, projectName);
 }
 
 export const BEATS = VAULTX_BEATS;

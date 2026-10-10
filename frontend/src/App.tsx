@@ -27,7 +27,7 @@ import { Cursor } from './ui/Cursor';
 import { Preloader } from './ui/Preloader';
 import { Backdrop } from './ui/Backdrop';
 import { DescentOverlay } from './descent/DescentOverlay';
-import { useCortexStore } from './state/store';
+import { useCortexStore, getPersistedWorld } from './state/store';
 
 export const App: React.FC = () => {
   const mode = useCortexStore((state) => state.mode);
@@ -41,10 +41,13 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (hasBootedRef.current) return;
     hasBootedRef.current = true;
-    // Automatically load persisted adapter or default "vaultx" on boot
-    const bootAdapter =
-      (typeof window !== 'undefined' ? localStorage.getItem('cortex.adapter') : null) || 'vaultx';
-    loadGraph(bootAdapter, true);
+    // Automatically load persisted world or default "vaultx" on boot
+    const world = getPersistedWorld();
+    if (world.adapter === 'java' && world.path) {
+      loadGraph('java', true, world.path);
+    } else {
+      loadGraph(world.adapter || 'vaultx', true);
+    }
   }, [loadGraph]);
 
   // Sync html & body scroll classes with current mode

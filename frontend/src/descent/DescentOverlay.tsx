@@ -25,9 +25,10 @@ export const DescentOverlay: React.FC = () => {
   const handoff = useCortexStore((state) => state.handoff);
 
   const customProjectName = useCortexStore((state) => state.customProjectName);
+  const strataMeta = useCortexStore((state) => state.strataMeta);
   const isReady = status === 'ready';
 
-  const beats = getBeats(adapter);
+  const beats = getBeats(adapter, strataMeta, customProjectName || undefined);
 
   const ctx: BeatContext = {
     adapter: adapter || 'vaultx',
@@ -241,6 +242,8 @@ export const DescentOverlay: React.FC = () => {
           let targetNumber: number | null = null;
           if (beat.countKey) {
             targetNumber = (ctx as any)[beat.countKey] ?? null;
+          } else if (beat.stratumIndex !== undefined) {
+            targetNumber = strataMeta.find((m) => m.stratumIndex === beat.stratumIndex)?.nodeCount ?? null;
           }
 
           return (

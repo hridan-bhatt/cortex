@@ -62,6 +62,39 @@ export interface BracketTarget {
   timestamp: number;
 }
 
+export interface WorldDescriptor {
+  adapter: string;
+  path?: string;
+  name?: string;
+}
+
+export function getPersistedWorld(): WorldDescriptor {
+  if (typeof window === 'undefined') return { adapter: 'vaultx' };
+  try {
+    const raw = localStorage.getItem('cortex.world');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && parsed.adapter) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Could not parse persisted cortex.world:', e);
+  }
+  const legacyAdapter = localStorage.getItem('cortex.adapter');
+  return { adapter: legacyAdapter || 'vaultx' };
+}
+
+export function persistWorld(world: WorldDescriptor): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem('cortex.world', JSON.stringify(world));
+    localStorage.setItem('cortex.adapter', world.adapter);
+  } catch (e) {
+    console.warn('Could not persist cortex.world:', e);
+  }
+}
+
 interface CortexState {
   mode: AppMode;
   theme: AppTheme;
@@ -275,7 +308,9 @@ interface CortexState {
   // Phase 2 Preloader
   isPreloading: boolean;
   preloaderStages: { ingest: boolean; graph: boolean; strata: boolean; layout: boolean; fibers: boolean };
+  preloaderNotice: string | null;
   dismissPreloader: () => void;
+  setPreloaderNotice: (notice: string | null) => void;
 
   // Phase 3 Audio
   isAudioEnabled: boolean;
@@ -405,6 +440,8 @@ export function computeSimStateAtEventIndex(
   return { failedNodeIds, failedEntities, rulesFired };
 }
 
+const initialWorld = getPersistedWorld();
+
 export const useCortexStore = create<CortexState>((set, get) => ({
   mode: 'descent', // App boots in "descent"
   theme: initialTheme,
@@ -413,10 +450,10 @@ export const useCortexStore = create<CortexState>((set, get) => ({
   currentBeatIndex: 0,
   status: 'idle',
   loadingStage: '',
-  adapter:
-    (typeof window !== 'undefined' ? localStorage.getItem('cortex.adapter') : null) || 'vaultx',
-  customProjectPath: null,
-  customProjectName: null,
+  adapter: initialWorld.adapter,
+  customProjectPath: initialWorld.path || null,
+  customProjectName: initialWorld.name || null,
+  preloaderNotice: null,
   nodes: [],
   edges: [],
   positions: new Map(),
@@ -477,6 +514,7 @@ export const useCortexStore = create<CortexState>((set, get) => ({
   isPreloading: false,
   preloaderStages: { ingest: false, graph: false, strata: false, layout: false, fibers: false },
   dismissPreloader: () => set({ isPreloading: false }),
+  setPreloaderNotice: (preloaderNotice) => set({ preloaderNotice }),
 
   // Phase 3 Audio
   isAudioEnabled: soundManager.isEnabled,
@@ -1060,9 +1098,11 @@ export const useCortexStore = create<CortexState>((set, get) => ({
         );
       }
       activeAdapter = returnedAdapter;
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('cortex.adapter', activeAdapter);
-      }
+      persistWorld(
+        customPath
+          ? { adapter: 'java', path: customPath, name: derivedProjectName || undefined }
+          : { adapter: activeAdapter }
+      );
       set((s) => ({
         preloaderStages: { ...s.preloaderStages, ingest: true },
         adapter: activeAdapter,
@@ -1203,7 +1243,7 @@ export const useCortexStore = create<CortexState>((set, get) => ({
       // Compute god class and strata counts
       let maxTotalDegree = -1;
       let godId: string | null = null;
-      let godName = activeAdapter === 'hospital' ? 'John Doe' : 'VaultXApplication';
+      let godName = activeAdapter === 'hospital' ? 'John Doe' : activeAdapter === 'vaultx' ? 'VaultXApplication' : 'root';
       let godOut = 0;
 
       for (const node of graphData.nodes) {
@@ -1212,7 +1252,7 @@ export const useCortexStore = create<CortexState>((set, get) => ({
         if (total > maxTotalDegree) {
           maxTotalDegree = total;
           godId = node.id;
-          godName = node.entityName || (activeAdapter === 'hospital' ? 'John Doe' : 'VaultXApplication');
+          godName = node.entityName || node.id || (activeAdapter === 'hospital' ? 'John Doe' : 'VaultXApplication');
           godOut = deg?.outDegree ?? 0;
         }
       }
@@ -1269,6 +1309,21 @@ export const useCortexStore = create<CortexState>((set, get) => ({
       }
     } catch (err: unknown) {
       console.error('Failed to load graph:', err);
+      // Requirement 2b: If custom project path no longer exists (moved/deleted folder, 400/404/500):
+      // fall back to vaultx AND surface a small honest notice in the preloader ("custom project path not found — loaded vaultx").
+      // Never a broken empty intro.
+      if (customPath || requestedAdapter === 'java') {
+        console.warn('[cortex] Custom project failed to load. Falling back to vaultx with honest notice.');
+        persistWorld({ adapter: 'vaultx' });
+        set({
+          preloaderNotice: 'custom project path not found — loaded vaultx',
+          customProjectPath: null,
+          customProjectName: null,
+        });
+        await get().loadGraph('vaultx', true);
+        return;
+      }
+
       const message =
         err instanceof Error ? err.message : 'backend unreachable on :8080 — is Spring Boot running?';
       setActiveAdapter(previousAdapter);

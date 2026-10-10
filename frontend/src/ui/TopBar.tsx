@@ -79,7 +79,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onStartTour, onAbortTour }) => {
   const setDescentProgress = useCortexStore((state) => state.setDescentProgress);
 
   const handleAdapterChange = (nextAdapter: string) => {
-    if (nextAdapter !== adapter || status === 'error') {
+    if (nextAdapter !== adapter || customProjectName || status === 'error') {
       loadGraph(nextAdapter, true);
     }
   };

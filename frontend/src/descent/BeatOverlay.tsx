@@ -14,6 +14,7 @@ export const BeatOverlay: React.FC<BeatOverlayProps> = ({ onHandoff }) => {
   const nodes = useCortexStore((state) => state.nodes);
   const edges = useCortexStore((state) => state.edges);
   const strataCounts = useCortexStore((state) => state.strataCounts);
+  const strataMeta = useCortexStore((state) => state.strataMeta);
   const godClassName = useCortexStore((state) => state.godClassName);
   const godClassOutDegree = useCortexStore((state) => state.godClassOutDegree);
   const storeHandoff = useCortexStore((state) => state.handoff);
@@ -42,30 +43,24 @@ export const BeatOverlay: React.FC<BeatOverlayProps> = ({ onHandoff }) => {
     godClassOutDegree: godClassOutDegree || 0,
   };
 
-  const beats = getBeats(adapter);
+  const beats = getBeats(adapter, strataMeta, customProjectName || undefined);
   const beatDef = beats[mountedBeat] || beats[0];
 
   // Target count for count-up animation
   const getTargetCount = (beatId: number): number => {
-    if (adapter === 'hospital') {
-      switch (beatId) {
-        case 1: return ctx.patientsCount ?? 0;
-        case 2: return ctx.prescriptionsCount ?? 0;
-        case 3: return ctx.medicationsCount ?? 0;
-        case 4: return ctx.godClassOutDegree;
-        default: return 0;
-      }
+    if (beatId === beats.length - 1) {
+      return ctx.godClassOutDegree;
     }
-    switch (beatId) {
-      case 1: return ctx.controllersCount;
-      case 2: return ctx.servicesCount;
-      case 3: return ctx.componentsCount;
-      case 4: return ctx.repositoriesCount;
-      case 5: return ctx.dataCount;
-      case 6: return ctx.librariesCount;
-      case 7: return ctx.godClassOutDegree;
-      default: return 0;
+    const currentDef = beats[beatId];
+    if (!currentDef) return 0;
+    if (currentDef.countKey && (ctx as any)[currentDef.countKey] !== undefined) {
+      return (ctx as any)[currentDef.countKey];
     }
+    if (currentDef.stratumIndex !== undefined) {
+      const meta = strataMeta.find((m) => m.stratumIndex === currentDef.stratumIndex);
+      if (meta) return meta.nodeCount;
+    }
+    return 0;
   };
 
   // Only EXACTLY ONE beat mounted at a time. Enter/leave gsap transition on beat change.
@@ -167,27 +162,11 @@ export const BeatOverlay: React.FC<BeatOverlayProps> = ({ onHandoff }) => {
           )}
 
           {/* Meta with Real Count */}
-          {mountedBeat > 0 && mountedBeat < (adapter === 'hospital' ? 4 : 7) && (
+          {mountedBeat > 0 && mountedBeat < beats.length - 1 && (
             <div className="font-mono text-ink text-[20px] font-medium pt-1">
               <span ref={counterRef}>0</span>{' '}
               <span className="text-muted font-normal text-[11px]">
-                {adapter === 'hospital'
-                  ? mountedBeat === 1
-                    ? 'patients'
-                    : mountedBeat === 2
-                    ? 'prescriptions'
-                    : 'medications'
-                  : mountedBeat === 1
-                  ? 'controllers'
-                  : mountedBeat === 2
-                  ? 'services'
-                  : mountedBeat === 3
-                  ? 'components'
-                  : mountedBeat === 4
-                  ? 'repositories'
-                  : mountedBeat === 5
-                  ? 'entities'
-                  : 'libraries'}
+                {beatDef.label.replace(/^layer\s+[a-zivx]+\s*—\s*/i, '').trim() || 'entities'}
               </span>
             </div>
           )}
@@ -196,7 +175,9 @@ export const BeatOverlay: React.FC<BeatOverlayProps> = ({ onHandoff }) => {
           {mountedBeat === 0 && (
             <div className="font-mono text-[11px] text-muted space-y-1">
               <div className="text-ink font-medium">
-                {adapter === 'hospital' ? 'clinical graph · hospital' : 'codebase intelligence · vaultx'}
+                {adapter === 'hospital'
+                  ? 'clinical graph · hospital'
+                  : `codebase intelligence · ${customProjectName || 'vaultx'}`}
               </div>
               <div>
                 {ctx.entitiesCount} entities · {ctx.relationshipsCount} relationships ·{' '}
@@ -206,7 +187,7 @@ export const BeatOverlay: React.FC<BeatOverlayProps> = ({ onHandoff }) => {
           )}
 
           {/* Arrival god-class and CTA */}
-          {((adapter === 'hospital' && mountedBeat === 4) || mountedBeat === 7) && (
+          {mountedBeat === beats.length - 1 && (
             <div className="space-y-3 pt-2">
               <div className="font-mono text-[11px] text-muted">
                 <span className="text-ink font-medium">{ctx.godClassName.toLowerCase()}</span> —{' '}
