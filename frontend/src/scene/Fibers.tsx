@@ -46,7 +46,7 @@ export let triggerGlobalHopPulse: HopPulseTrigger = () => {};
 export const Fibers: React.FC = () => {
   const { camera, gl } = useThree();
   const mode = useCortexStore((state) => state.mode);
-  const theme = useCortexStore((state) => state.theme);
+  const theme = useCortexStore.getState().theme;
   const adapter = useCortexStore((state) => state.adapter);
   const edges = useCortexStore((state) => state.edges);
   const nodes = useCortexStore((state) => state.nodes);
@@ -182,8 +182,49 @@ export const Fibers: React.FC = () => {
 
   useEffect(() => {
     (window as any).__cortex_fiber_theme_uniform = uThemeUniform;
+    
+    (window as any).__cortex_update_fibers_theme = (nextTheme: import('../domain/strata').AppTheme) => {
+      const mesh = meshRef.current;
+      if (!mesh || !mesh.geometry) return;
+      const colorAttr = mesh.geometry.getAttribute('color');
+      if (!colorAttr) return;
+      const colorArray = colorAttr.array as Float32Array;
+      const target = targetColorsRef.current;
+
+      const isPaper = nextTheme === 'paper';
+      const activeBg = isPaper ? PAPER_BG : NIGHT_BG;
+      const stratumColors = isPaper ? STRATUM_COLORS_PAPER : STRATUM_COLORS_NIGHT;
+      const restMix = useCortexStore.getState().complexityMode === 'min' ? 0.90 : (isPaper ? 0.30 : 0.62);
+
+      for (let i = 0; i < rangesRef.current.length; i++) {
+        const range = rangesRef.current[i];
+        const srcHue = stratumColors[range.sourceStratum] || activeBg;
+        const tgtHue = stratumColors[range.targetStratum] || activeBg;
+        
+        for (let v = 0; v < range.count; v++) {
+          const vOffset = (range.start + v) * 3;
+          const t = (Math.floor(v / 5)) / 12; // Recreate t
+          
+          const sMix = srcHue.clone().lerp(activeBg, restMix);
+          const tMix = tgtHue.clone().lerp(activeBg, restMix);
+          const vCol = sMix.lerp(tMix, t);
+          
+          target[vOffset] = vCol.r;
+          target[vOffset + 1] = vCol.g;
+          target[vOffset + 2] = vCol.b;
+          colorArray[vOffset] = vCol.r;
+          colorArray[vOffset + 1] = vCol.g;
+          colorArray[vOffset + 2] = vCol.b;
+        }
+      }
+      colorAttr.needsUpdate = true;
+      uThemeUniform.value = isPaper ? 1.0 : 0.0;
+      lastTargetStateKeyRef.current = ''; // Force re-eval on next useFrame
+    };
+
     return () => {
       delete (window as any).__cortex_fiber_theme_uniform;
+      delete (window as any).__cortex_update_fibers_theme;
     };
   }, [uThemeUniform]);
 

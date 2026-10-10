@@ -78,7 +78,7 @@ export const Nodes: React.FC = () => {
     baseRadiiRef.current = new Map(radii);
   }, [radii]);
 
-  const theme = useCortexStore((state) => state.theme);
+  const theme = useCortexStore.getState().theme;
 
   // Custom Shader Material setup: matte painted spheres on paper (roughness 0.82, metalness 0.0)
   const customMaterial = useMemo(() => {
@@ -157,6 +157,35 @@ export const Nodes: React.FC = () => {
       mesh.instanceColor.needsUpdate = true;
     }
   }, [nodes, positions, radii, nodeStrata, tempObject]);
+
+  // Imperative hook for 3D theme mid-point update (zero React re-render)
+  useEffect(() => {
+    (window as any).__cortex_update_nodes_theme = (nextTheme: import('../domain/strata').AppTheme) => {
+      if (customMaterial) {
+        customMaterial.roughness = nextTheme === 'paper' ? 0.82 : 0.65;
+        customMaterial.metalness = nextTheme === 'paper' ? 0.0 : 0.05;
+      }
+      
+      const mesh = meshRef.current;
+      if (!mesh || !mesh.instanceColor) return;
+      
+      const isPaper = nextTheme === 'paper';
+      const bgCol = isPaper ? BG_PAPER : BG_NIGHT;
+      const stratumHues = isPaper ? STRATUM_HUES_PAPER : STRATUM_HUES_NIGHT;
+      const tempCol = new THREE.Color();
+      
+      for (let i = 0; i < nodes.length; i++) {
+        const sIdx = nodeStrata.get(nodes[i].id) ?? 6;
+        const baseHue = stratumHues[sIdx] || stratumHues[6];
+        tempCol.copy(baseHue).lerp(bgCol, 0.40);
+        mesh.setColorAt(i, tempCol);
+      }
+      mesh.instanceColor.needsUpdate = true;
+    };
+    return () => {
+      delete (window as any).__cortex_update_nodes_theme;
+    };
+  }, [nodes, nodeStrata, customMaterial]);
 
   // Active focus target (hovered or selected) for neighborhood lens bloom (R2)
   const activeFocusId = hoveredNodeId || selectedNodeId;

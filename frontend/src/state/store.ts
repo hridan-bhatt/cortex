@@ -638,24 +638,31 @@ export const useCortexStore = create<CortexState>((set, get) => ({
         // Backdrop handles direct DOM swap in its own callback
       },
       // onApplyReactTheme (t≈140ms under >90% solid veil):
-      // Normal async setState (NO flushSync)
-      () => {
-        set({ theme: next });
-      },
+      // NO-OP: React state update deferred to onComplete to prevent main thread blocking during transition
+      () => {},
       // onMidpoint3D (t≈190ms under solid veil opacity 1.0):
       // Apply precomputed 3D uniform values as plain assignments + render ONE on-demand frame
       () => {
         if (typeof window !== 'undefined' && (window as any).__cortex_apply_3d_theme) {
           (window as any).__cortex_apply_3d_theme(precomputed3D);
         }
+        if (typeof window !== 'undefined' && (window as any).__cortex_update_edges_theme) {
+          (window as any).__cortex_update_edges_theme(next);
+        }
+        if (typeof window !== 'undefined' && (window as any).__cortex_update_nodes_theme) {
+          (window as any).__cortex_update_nodes_theme(next);
+        }
+        if (typeof window !== 'undefined' && (window as any).__cortex_update_fibers_theme) {
+          (window as any).__cortex_update_fibers_theme(next);
+        }
         if (typeof window !== 'undefined' && (window as any).__cortex_render_frame) {
           (window as any).__cortex_render_frame();
         }
       },
       // onComplete (t=380ms veil fully lifted):
-      // Resume continuous frameloop
+      // Resume continuous frameloop AND synchronize React state
       () => {
-        set({ isFrameloopSuspended: false, isThemeTransitioning: false });
+        set({ theme: next, isFrameloopSuspended: false, isThemeTransitioning: false });
       }
     );
   },

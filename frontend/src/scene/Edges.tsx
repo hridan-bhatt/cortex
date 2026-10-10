@@ -8,7 +8,7 @@ const FLOW_SPEED = 26.0 / 7.0; // Crosses 26-unit gap in ~7 seconds (3.714 units
 
 export const Edges: React.FC = () => {
   const mode = useCortexStore((state) => state.mode);
-  const theme = useCortexStore((state) => state.theme);
+  const theme = useCortexStore.getState().theme;
   const edges = useCortexStore((state) => state.edges);
   const positions = useCortexStore((state) => state.positions);
   const nodeStrata = useCortexStore((state) => state.nodeStrata);
@@ -148,6 +148,43 @@ export const Edges: React.FC = () => {
 
     geom.computeBoundingSphere();
   }, [linePositions, lineColors, lineDistances, edges]);
+
+  // Imperative hook for 3D theme mid-point update (zero React re-render)
+  useEffect(() => {
+    (window as any).__cortex_update_edges_theme = (nextTheme: import('../domain/strata').AppTheme) => {
+      const geom = geometryRef.current;
+      if (!geom || edges.length === 0 || positions.size === 0) return;
+      
+      const colAttr = geom.getAttribute('color');
+      if (!colAttr) return;
+      const colArray = colAttr.array as Float32Array;
+
+      const tempSrcCol = new THREE.Color();
+      const tempTgtCol = new THREE.Color();
+      const bgCol = new THREE.Color(nextTheme === 'paper' ? '#ECE7DE' : '#0B0D12');
+
+      for (let i = 0; i < edges.length; i++) {
+        const edge = edges[i];
+        const sSrc = nodeStrata.get(edge.sourceId) ?? 6;
+        const sTgt = nodeStrata.get(edge.targetId) ?? 6;
+
+        tempSrcCol.set(getStratumColor(sSrc, undefined, nextTheme)).lerp(bgCol, 0.3);
+        tempTgtCol.set(getStratumColor(sTgt, undefined, nextTheme)).lerp(bgCol, 0.3);
+
+        colArray[i * 6 + 0] = tempSrcCol.r;
+        colArray[i * 6 + 1] = tempSrcCol.g;
+        colArray[i * 6 + 2] = tempSrcCol.b;
+
+        colArray[i * 6 + 3] = tempTgtCol.r;
+        colArray[i * 6 + 4] = tempTgtCol.g;
+        colArray[i * 6 + 5] = tempTgtCol.b;
+      }
+      colAttr.needsUpdate = true;
+    };
+    return () => {
+      delete (window as any).__cortex_update_edges_theme;
+    };
+  }, [edges, positions, nodeStrata]);
 
   // Edges touching currently hovered node
   const activeIncidentEdges = useMemo(() => {

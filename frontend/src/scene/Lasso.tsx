@@ -92,7 +92,7 @@ const SingleLasso: React.FC<SingleLassoProps> = ({ cycle, index, isHovered, anyH
 
   if (!curve || !tubeGeometry) return null;
 
-  const theme = useCortexStore((state) => state.theme);
+  const theme = useCortexStore.getState().theme;
   const isPaper = theme === 'paper';
   const lassoColor = isPaper ? '#8A6A1F' : '#C9A45C';
   const beadColor = isPaper ? '#4A360E' : '#FFF8E7';

@@ -26,7 +26,7 @@ const DynamicFog: React.FC = () => {
   const { scene } = useThree();
   const positions = useCortexStore((state) => state.positions);
   const frameDistance = useCortexStore((state) => state.frameDistance);
-  const theme = useCortexStore((state) => state.theme);
+  const theme = useCortexStore.getState().theme;
   const fogRef = useRef<THREE.Fog | null>(null);
 
   const { near, far } = useMemo(() => {
@@ -892,7 +892,7 @@ const CameraController: React.FC = () => {
 };
 
 const LightingRig: React.FC = () => {
-  const theme = useCortexStore((state) => state.theme);
+  const theme = useCortexStore.getState().theme;
   const hemiRef = useRef<THREE.HemisphereLight>(null);
   const dir1Ref = useRef<THREE.DirectionalLight>(null);
   const dir2Ref = useRef<THREE.DirectionalLight>(null);
